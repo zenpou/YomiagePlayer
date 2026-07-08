@@ -63,6 +63,7 @@ public partial class App : Application
 
         services.AddSingleton<PlaybackViewModel>();
         services.AddSingleton<LyricsViewModel>();
+        services.AddSingleton<PlaylistViewModel>();
         services.AddSingleton<MainWindow>();
     }
 
