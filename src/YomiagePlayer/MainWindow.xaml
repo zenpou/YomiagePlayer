@@ -54,6 +54,10 @@
                                  フローティングコンテンツ側で行う -->
                             <Grid Background="Transparent" AllowDrop="True"
                                   Drop="Window_Drop" DragOver="Window_PreviewDragOver">
+                                <!-- 音声ファイル再生時のアートワーク(埋め込み or 同フォルダ画像) -->
+                                <Image x:Name="ArtworkImage" Stretch="Uniform" Margin="24"
+                                       RenderOptions.BitmapScalingMode="HighQuality"
+                                       Visibility="Collapsed" />
                                 <TextBlock x:Name="NowPlayingText" Foreground="#888" FontSize="18"
                                            HorizontalAlignment="Center" VerticalAlignment="Center"
                                            Text="ファイルまたはフォルダを開いてください" />
