@@ -1,0 +1,80 @@
+name: Release build
+
+# Builds the self-contained win-x64 distributable via scripts/publish.ps1.
+# - On a v* tag push: builds and attaches the zip to a GitHub Release.
+# - On manual dispatch: builds and uploads the zip as a workflow artifact only.
+#
+# ffmpeg is not in git (see tools/ffmpeg/README.md), so the LGPL build is
+# downloaded from BtbN/FFmpeg-Builds here before publishing.
+# The Whisper model is never bundled - users download it from the Settings
+# window on first run.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Download ffmpeg (LGPL build)
+        shell: pwsh
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP "ffmpeg-lgpl.zip"
+          $extract = Join-Path $env:RUNNER_TEMP "ffmpeg-lgpl"
+          Invoke-WebRequest `
+            -Uri "https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-lgpl.zip" `
+            -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath $extract -Force
+          $bin = Get-ChildItem $extract -Recurse -Filter "ffmpeg.exe" | Select-Object -First 1
+          if (-not $bin) { throw "ffmpeg.exe not found in downloaded archive" }
+          Copy-Item (Join-Path $bin.DirectoryName "ffmpeg.exe"), (Join-Path $bin.DirectoryName "ffprobe.exe") `
+            -Destination (Join-Path $env:GITHUB_WORKSPACE "tools\ffmpeg") -Force
+
+      - name: Test
+        run: dotnet test --configuration Release
+
+      - name: Publish (win-x64)
+        shell: pwsh
+        run: ./scripts/publish.ps1 -Runtime win-x64
+
+      - name: Rename zip with version
+        id: zip
+        shell: pwsh
+        run: |
+          $version = if ($env:GITHUB_REF_TYPE -eq "tag") { $env:GITHUB_REF_NAME } else { $env:GITHUB_SHA.Substring(0, 7) }
+          $name = "YomiagePlayer-$version-win-x64.zip"
+          Rename-Item "dist/YomiagePlayer-win-x64.zip" $name
+          "name=$name" >> $env:GITHUB_OUTPUT
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.zip.outputs.name }}
+          path: dist/${{ steps.zip.outputs.name }}
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ZIP_NAME: ${{ steps.zip.outputs.name }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME "dist/$env:ZIP_NAME" `
+            --title "YomiagePlayer $env:GITHUB_REF_NAME" `
+            --generate-notes
