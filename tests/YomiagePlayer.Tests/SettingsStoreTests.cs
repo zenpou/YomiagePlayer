@@ -13,7 +13,7 @@ public class SettingsStoreTests : IDisposable
     {
         var s = new SettingsStore(SettingsFile).Load();
         Assert.Equal("medium", s.Model);
-        Assert.Equal(80, s.Volume);
+        Assert.Equal(100, s.Volume);
         Assert.Empty(s.RegisteredFolders);
     }
 

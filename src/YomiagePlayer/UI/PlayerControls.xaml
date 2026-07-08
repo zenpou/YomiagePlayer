@@ -55,8 +55,13 @@
 
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                 <TextBlock Text="🔊" Foreground="#CCC" VerticalAlignment="Center" Margin="0,0,4,0" />
-                <Slider Width="100" Minimum="0" Maximum="100"
-                        Value="{Binding Volume, Mode=TwoWay}" VerticalAlignment="Center" />
+                <Slider Width="120" Minimum="0" Maximum="150"
+                        Value="{Binding Volume, Mode=TwoWay}" VerticalAlignment="Center"
+                        Ticks="100" TickPlacement="BottomRight"
+                        ToolTip="100%が原音量。100%超はソフトウェア増幅" />
+                <TextBlock Foreground="#CCC" VerticalAlignment="Center" Margin="6,0,0,0" MinWidth="38">
+                    <Run Text="{Binding Volume, Mode=OneWay}" /><Run Text="%" />
+                </TextBlock>
             </StackPanel>
         </Grid>
     </Grid>
