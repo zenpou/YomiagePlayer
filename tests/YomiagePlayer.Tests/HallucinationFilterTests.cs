@@ -52,4 +52,22 @@ public class HallucinationFilterTests
     [InlineData("。。。")]
     public void EmptyOrSymbolOnly_Dropped(string text)
         => Assert.True(_f.ShouldDrop(new(0, 1, text), null));
+
+    [Theory]
+    [InlineData("(笑)")]
+    [InlineData("（笑）")]
+    [InlineData("(笑)(笑)")]
+    [InlineData("（拍手）")]
+    [InlineData("[音楽]")]
+    [InlineData("【咀嚼音】")]
+    [InlineData("♪〜")]
+    [InlineData(" (笑) ")]
+    public void AnnotationOnlySegment_Dropped(string text)
+        => Assert.True(_f.ShouldDrop(new(0, 1, text), null));
+
+    [Theory]
+    [InlineData("そうなんだ(笑)")]
+    [InlineData("面白いですね（笑）本当に")]
+    public void TextWithInlineAnnotation_Kept(string text)
+        => Assert.False(_f.ShouldDrop(new(0, 2, text), null));
 }

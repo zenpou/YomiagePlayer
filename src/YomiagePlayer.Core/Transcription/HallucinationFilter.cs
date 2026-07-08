@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using YomiagePlayer.Core.Models;
 
 namespace YomiagePlayer.Core.Transcription;
@@ -23,9 +24,16 @@ public class HallucinationFilter
 
     private const double RepeatMaxDurationSec = 2.0;
 
+    // (笑) （拍手） [音楽] 【咀嚼音】等、無音・非音声区間でWhisperが生成しがちな注釈
+    private static readonly Regex BracketedAnnotation =
+        new(@"[（(\[【][^）)\]】]*[）)\]】]", RegexOptions.Compiled);
+
     public bool ShouldDrop(TranscriptSegment segment, TranscriptSegment? previous)
     {
-        var normalized = Normalize(segment.Text);
+        // 括弧書き注釈を除いて何も残らないセグメントは非音声とみなす
+        // (「そうなんだ(笑)」のような本文中の注釈は残る)
+        var withoutAnnotations = BracketedAnnotation.Replace(segment.Text, "");
+        var normalized = Normalize(withoutAnnotations);
 
         if (normalized.Length == 0)
             return true;
@@ -36,7 +44,7 @@ public class HallucinationFilter
         // 短時間の同文反復 = 繰り返しループ。長い反復は歌のサビ等の可能性があるので残す
         if (previous is not null
             && segment.End - segment.Start < RepeatMaxDurationSec
-            && normalized == Normalize(previous.Text))
+            && normalized == Normalize(BracketedAnnotation.Replace(previous.Text, "")))
             return true;
 
         return false;
