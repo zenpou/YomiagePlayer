@@ -62,6 +62,7 @@ public partial class App : Application
         services.AddSingleton(sp => new ModelDownloader(new HttpClient()));
 
         services.AddSingleton<PlaybackViewModel>();
+        services.AddSingleton<LyricsViewModel>();
         services.AddSingleton<MainWindow>();
     }
 
