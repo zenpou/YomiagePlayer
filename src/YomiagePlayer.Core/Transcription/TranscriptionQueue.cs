@@ -25,6 +25,12 @@ public class TranscriptionQueue(int maxWaiting = 5)
     private QueueItem? _running;
     private Task _pump = Task.CompletedTask;
 
+    /// <summary>実行中ジョブも待機ジョブもない状態。アイドル時バックグラウンド解析の判定に使う。</summary>
+    public bool IsIdle
+    {
+        get { lock (_lock) return _running is null && _waiting.Count == 0; }
+    }
+
     public Task<TranscriptionResult> Enqueue(
         string hashKey, Func<CancellationToken, Task<TranscriptionResult>> job)
     {
