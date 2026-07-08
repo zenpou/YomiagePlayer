@@ -33,7 +33,7 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
-                <ContentControl x:Name="LibraryHost" Grid.Row="0" />
+                <ui:LibraryPane x:Name="Library" Grid.Row="0" />
                 <ui:PlaylistPane x:Name="Playlist" Grid.Row="1" />
             </Grid>
 
