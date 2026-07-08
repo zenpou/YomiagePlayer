@@ -1,3 +1,4 @@
+using System.IO;
 using YomiagePlayer.Core.Transcription;
 
 namespace YomiagePlayer.Tests;

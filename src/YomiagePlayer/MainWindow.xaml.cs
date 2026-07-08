@@ -16,16 +16,25 @@ public partial class MainWindow : Window
 
     private readonly PlaybackService _playback;
     private readonly PlaybackViewModel _playbackVm;
+    private readonly LyricsViewModel _lyricsVm;
 
     /// <summary>ファイルが開かれた(D&D/ダイアログ)。後続タスクでプレイリスト/解析へ接続する。</summary>
     public event Action<IReadOnlyList<string>>? FilesOpened;
 
-    public MainWindow(PlaybackService playback, PlaybackViewModel playbackVm)
+    public MainWindow(PlaybackService playback, PlaybackViewModel playbackVm, LyricsViewModel lyricsVm)
     {
         InitializeComponent();
         _playback = playback;
         _playbackVm = playbackVm;
+        _lyricsVm = lyricsVm;
         Controls.DataContext = playbackVm;
+        Lyrics.DataContext = lyricsVm;
+
+        _lyricsVm.SeekRequested += s => _playback.SeekTo(TimeSpan.FromSeconds(s));
+        _playback.PositionChanged += t => Dispatcher.BeginInvoke(
+            () => _lyricsVm.UpdatePosition(t.TotalSeconds));
+        _playback.LengthKnown += t => Dispatcher.BeginInvoke(
+            () => _lyricsVm.SetDuration(t.TotalSeconds));
 
         Loaded += (_, _) =>
         {

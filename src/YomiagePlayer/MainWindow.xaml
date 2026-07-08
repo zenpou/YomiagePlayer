@@ -67,7 +67,7 @@
             <GridSplitter Grid.Column="3" HorizontalAlignment="Stretch" Background="#333" />
 
             <!-- 右: 歌詞パネル -->
-            <ContentControl x:Name="LyricsHost" Grid.Column="4" />
+            <ui:LyricsPane x:Name="Lyrics" Grid.Column="4" />
         </Grid>
     </DockPanel>
 </Window>
