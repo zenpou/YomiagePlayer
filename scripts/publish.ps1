@@ -41,7 +41,25 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $outDir = Join-Path $repoRoot "dist\$Runtime"
 $project = Join-Path $repoRoot "src\YomiagePlayer"
 
+function Stop-RunningOutput {
+    # A previous build's exe left running from $outDir locks its own DLLs,
+    # which breaks publish/prune/zip. Only touch processes running from
+    # under $outDir - never anything outside this build's own output.
+    if (-not (Test-Path $outDir)) { return }
+    $resolved = (Resolve-Path $outDir).Path
+    Get-Process -Name "YomiagePlayer" -ErrorAction SilentlyContinue | ForEach-Object {
+        $procPath = $_.Path
+        if ($procPath -and $procPath.StartsWith($resolved, [StringComparison]::OrdinalIgnoreCase)) {
+            Write-Host "Stopping running instance from previous build: $procPath (pid $($_.Id))"
+            Stop-Process -Id $_.Id -Force
+            Start-Sleep -Milliseconds 500
+        }
+    }
+}
+
 Write-Host "== YomiagePlayer publish build ($Runtime / $Configuration) ==" -ForegroundColor Cyan
+
+Stop-RunningOutput
 
 if (Test-Path $outDir) {
     Write-Host "Removing existing output: $outDir"
@@ -113,11 +131,18 @@ Write-Host "`nOutput size: ${sizeMb}MB ($outDir)" -ForegroundColor Green
 
 if (-not $SkipZip) {
     Write-Host "`n-- Creating zip --" -ForegroundColor Cyan
+    Stop-RunningOutput # in case the exe was launched (e.g. for testing) while this script was running
     $zipPath = Join-Path $repoRoot "dist\YomiagePlayer-$Runtime.zip"
     if (Test-Path $zipPath) { Remove-Item -Force $zipPath }
-    Compress-Archive -Path "$outDir\*" -DestinationPath $zipPath
-    $zipMb = [math]::Round((Get-Item $zipPath).Length / 1MB, 1)
-    Write-Host "Created: $zipPath (${zipMb}MB)" -ForegroundColor Green
+    try {
+        Compress-Archive -Path "$outDir\*" -DestinationPath $zipPath -ErrorAction Stop
+        $zipMb = [math]::Round((Get-Item $zipPath).Length / 1MB, 1)
+        Write-Host "Created: $zipPath (${zipMb}MB)" -ForegroundColor Green
+    }
+    catch {
+        Write-Warning "Zip creation failed (a file may still be locked by a running process): $($_.Exception.Message)"
+        Write-Warning "The unzipped build is still available at: $outDir"
+    }
 }
 
 Write-Host "`nDone. The Whisper model is not bundled - download it from the Settings window on first run." -ForegroundColor Yellow
