@@ -7,6 +7,7 @@
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:SettingsViewModel}"
         Title="設定 - YomiagePlayer" Height="480" Width="560"
+        Icon="/Assets/app.ico"
         WindowStartupLocation="CenterOwner" Background="#1E1E1E">
     <TabControl Margin="8" Background="Transparent">
         <TabItem Header="音声認識">
