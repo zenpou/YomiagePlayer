@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using YomiagePlayer.Core;
 using YomiagePlayer.Core.Cache;
+using YomiagePlayer.Core.Library;
 using YomiagePlayer.Core.Transcription;
 using YomiagePlayer.Services;
 using YomiagePlayer.ViewModels;
@@ -60,10 +61,12 @@ public partial class App : Application
         services.AddSingleton<AudioExtractor>();
         services.AddSingleton<HallucinationFilter>();
         services.AddSingleton(sp => new ModelDownloader(new HttpClient()));
+        services.AddSingleton<SettingsStore>();
 
         services.AddSingleton<PlaybackViewModel>();
         services.AddSingleton<LyricsViewModel>();
         services.AddSingleton<PlaylistViewModel>();
+        services.AddSingleton<LibraryViewModel>();
         services.AddSingleton<MainWindow>();
     }
 

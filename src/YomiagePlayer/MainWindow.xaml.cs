@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows;
 using Microsoft.Win32;
+using YomiagePlayer.Core.Library;
 using YomiagePlayer.Services;
 using YomiagePlayer.ViewModels;
 
@@ -18,6 +19,8 @@ public partial class MainWindow : Window
     private readonly PlaybackViewModel _playbackVm;
     private readonly LyricsViewModel _lyricsVm;
     private readonly PlaylistViewModel _playlistVm;
+    private readonly LibraryViewModel _libraryVm;
+    private readonly SettingsStore _settingsStore;
 
     /// <summary>ファイルが開かれた(D&D/ダイアログ/引数)。</summary>
     public event Action<IReadOnlyList<string>>? FilesOpened;
@@ -29,16 +32,39 @@ public partial class MainWindow : Window
         PlaybackService playback,
         PlaybackViewModel playbackVm,
         LyricsViewModel lyricsVm,
-        PlaylistViewModel playlistVm)
+        PlaylistViewModel playlistVm,
+        LibraryViewModel libraryVm,
+        SettingsStore settingsStore)
     {
         InitializeComponent();
         _playback = playback;
         _playbackVm = playbackVm;
         _lyricsVm = lyricsVm;
         _playlistVm = playlistVm;
+        _libraryVm = libraryVm;
+        _settingsStore = settingsStore;
         Controls.DataContext = playbackVm;
         Lyrics.DataContext = lyricsVm;
         Playlist.DataContext = playlistVm;
+        Library.DataContext = libraryVm;
+
+        _libraryVm.FilesRequested += (files, replace) =>
+        {
+            if (replace)
+            {
+                _playlistVm.ReplaceAll(files);
+                if (_playlistVm.Items.Count > 0)
+                    _playlistVm.PlayItem(_playlistVm.Items[0]);
+            }
+            else
+            {
+                _playlistVm.Add(files);
+            }
+        };
+        _libraryVm.FoldersChanged += SaveSettings;
+
+        RestoreSettings();
+        Closing += (_, _) => SaveSettings();
 
         _lyricsVm.SeekRequested += s => _playback.SeekTo(TimeSpan.FromSeconds(s));
         _playback.PositionChanged += t => Dispatcher.BeginInvoke(
@@ -92,6 +118,27 @@ public partial class MainWindow : Window
         var dialog = new OpenFolderDialog();
         if (dialog.ShowDialog() == true)
             FilesOpened?.Invoke(EnumerateMediaFiles(dialog.FolderName));
+    }
+
+    private void RestoreSettings()
+    {
+        var s = _settingsStore.Load();
+        _playbackVm.Volume = s.Volume;
+        Width = s.WindowWidth;
+        Height = s.WindowHeight;
+        _libraryVm.SetFolders(s.RegisteredFolders);
+    }
+
+    private void SaveSettings()
+    {
+        var current = _settingsStore.Load();
+        _settingsStore.Save(current with
+        {
+            RegisteredFolders = _libraryVm.FolderPaths.ToList(),
+            Volume = _playbackVm.Volume,
+            WindowWidth = Width,
+            WindowHeight = Height,
+        });
     }
 
     public static List<string> EnumerateMediaFiles(string folder)
