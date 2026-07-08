@@ -9,7 +9,7 @@ public class AudioExtractionException(string message, Exception? inner = null)
 /// ffmpeg(LGPLビルド)でメディアファイルからWhisper入力用の
 /// 16kHz mono 16bit PCM WAVを抽出する。最初の音声トラック固定。
 /// </summary>
-public class AudioExtractor(string tempDir)
+public class AudioExtractor(string tempDir) : IAudioExtractorService
 {
     public AudioExtractor() : this(AppPaths.Temp) { }
 
