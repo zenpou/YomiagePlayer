@@ -4,6 +4,7 @@
         xmlns:vlc="clr-namespace:LibVLCSharp.WPF;assembly=LibVLCSharp.WPF"
         xmlns:ui="clr-namespace:YomiagePlayer.UI"
         Title="YomiagePlayer" Height="720" Width="1200"
+        Icon="Assets/app.ico"
         Background="#1E1E1E"
         AllowDrop="True" Drop="Window_Drop" PreviewDragOver="Window_PreviewDragOver">
     <DockPanel>
