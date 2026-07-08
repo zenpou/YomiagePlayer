@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/YomiagePlayer.Core/YomiagePlayer.Core.csproj" />
+    <Project Path="src/YomiagePlayer/YomiagePlayer.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/YomiagePlayer.Tests/YomiagePlayer.Tests.csproj" />
+  </Folder>
+</Solution>
