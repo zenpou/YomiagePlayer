@@ -9,9 +9,6 @@ namespace YomiagePlayer;
 
 public partial class MainWindow : Window
 {
-    public static readonly string[] SupportedExtensions =
-        [".mp3", ".wav", ".flac", ".m4a", ".ogg", ".opus", ".mp4", ".mkv", ".avi", ".webm"];
-
     private const string FileDialogFilter =
         "メディアファイル|*.mp3;*.wav;*.flac;*.m4a;*.ogg;*.opus;*.mp4;*.mkv;*.avi;*.webm|すべてのファイル|*.*";
 
@@ -154,10 +151,7 @@ public partial class MainWindow : Window
     }
 
     public static List<string> EnumerateMediaFiles(string folder)
-        => Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories)
-            .Where(f => SupportedExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
-            .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        => MediaFiles.Enumerate(folder);
 
     /// <summary>設定画面を開く要求。App側でSettingsWindowを生成して表示する。</summary>
     public event Action? SettingsRequested;
@@ -180,7 +174,7 @@ public partial class MainWindow : Window
         foreach (var p in paths)
         {
             if (Directory.Exists(p)) files.AddRange(EnumerateMediaFiles(p));
-            else if (SupportedExtensions.Contains(Path.GetExtension(p).ToLowerInvariant())) files.Add(p);
+            else if (MediaFiles.IsSupported(p)) files.Add(p);
         }
         if (files.Count > 0)
             FilesOpened?.Invoke(files);

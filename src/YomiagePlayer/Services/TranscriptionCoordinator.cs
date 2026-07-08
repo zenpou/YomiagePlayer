@@ -60,6 +60,45 @@ public sealed class TranscriptionCoordinator : IDisposable
 
     public Task OnMediaChangedAsync(string mediaPath) => HandleAsync(mediaPath, force: false);
 
+    /// <summary>
+    /// UIに触れないバックグラウンド解析(アイドル時のライブラリ事前解析用)。
+    /// 解析を実行したらtrue、キャッシュ済み・モデル未DL・失敗ならfalse。
+    /// </summary>
+    public async Task<bool> EnsureAnalyzedAsync(string mediaPath)
+    {
+        var model = CurrentModel;
+        if (!_downloader.IsDownloaded(model)) return false;
+
+        string key;
+        try
+        {
+            key = await Task.Run(() => ContentHasher.ComputeKey(mediaPath)).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "バックグラウンド解析: ハッシュ計算失敗 {Path}", mediaPath);
+            return false;
+        }
+
+        if (_cache.TryLoad(key, model.Id(), out _)) return false;
+
+        try
+        {
+            await _queue.Enqueue(key, ct => RunJobAsync(mediaPath, key, model, ct))
+                .ConfigureAwait(false);
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "バックグラウンド解析失敗: {Path}", mediaPath);
+            return false;
+        }
+    }
+
     /// <summary>右クリック「再解析」。キャッシュを消して解析し直す。</summary>
     public Task ReanalyzeAsync(string mediaPath) => HandleAsync(mediaPath, force: true);
 

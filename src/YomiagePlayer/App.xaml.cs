@@ -61,6 +61,11 @@ public partial class App : Application
             settings.ShowDialog();
         };
         window.Show();
+
+        // アイドル時にライブラリの未解析ファイルをバックグラウンド解析
+        var idleAnalysis = _services.GetRequiredService<IdleAnalysisService>();
+        _services.GetRequiredService<LibraryViewModel>().FoldersChanged += idleAnalysis.ResetVisited;
+        idleAnalysis.Start();
     }
 
     private static void ConfigureServices(ServiceCollection services)
@@ -83,6 +88,10 @@ public partial class App : Application
             sp.GetRequiredService<SettingsStore>(),
             sp.GetRequiredService<LyricsViewModel>(),
             action => Current.Dispatcher.BeginInvoke(action)));
+        services.AddSingleton(sp => new IdleAnalysisService(
+            sp.GetRequiredService<TranscriptionCoordinator>(),
+            sp.GetRequiredService<TranscriptionQueue>(),
+            () => sp.GetRequiredService<LibraryViewModel>().FolderPaths.ToList()));
 
         services.AddSingleton<PlaybackViewModel>();
         services.AddSingleton<LyricsViewModel>();
@@ -96,6 +105,7 @@ public partial class App : Application
     {
         Log.Information("YomiagePlayer 終了");
         // graceful shutdown: 進行中の解析をキャンセルし、一時WAVを掃除
+        _services?.GetService<IdleAnalysisService>()?.Dispose();
         try
         {
             _services?.GetService<TranscriptionCoordinator>()?
