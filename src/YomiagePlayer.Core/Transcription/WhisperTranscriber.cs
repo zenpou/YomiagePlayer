@@ -12,7 +12,7 @@ namespace YomiagePlayer.Core.Transcription;
 /// + NoContext(繰り返し連鎖の抑制) + HallucinationFilter(テキストベース後処理)。
 /// ※Whisper.net 1.9.1にはSilero VADのビルダーAPIが無いため、VADなし構成。
 /// </summary>
-public sealed class WhisperTranscriber(string modelPath, HallucinationFilter filter) : IDisposable
+public sealed class WhisperTranscriber(string modelPath, HallucinationFilter filter) : ITranscriber
 {
     private WhisperFactory? _factory;
 

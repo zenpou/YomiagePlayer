@@ -50,6 +50,9 @@ public partial class App : Application
         _services.GetRequiredService<AudioExtractor>().CleanupTemp();
 
         var window = _services.GetRequiredService<MainWindow>();
+        var coordinator = _services.GetRequiredService<TranscriptionCoordinator>();
+        window.MediaChanged += path => _ = coordinator.OnMediaChangedAsync(path);
+        window.ReanalyzeRequested += path => _ = coordinator.ReanalyzeAsync(path);
         window.SettingsRequested += () =>
         {
             var settings = new UI.SettingsWindow(
@@ -69,6 +72,17 @@ public partial class App : Application
         services.AddSingleton<HallucinationFilter>();
         services.AddSingleton(sp => new ModelDownloader(new HttpClient()));
         services.AddSingleton<SettingsStore>();
+        services.AddSingleton<IAudioExtractorService>(sp => sp.GetRequiredService<AudioExtractor>());
+        services.AddSingleton<ITranscriberFactory, WhisperTranscriberFactory>();
+        services.AddSingleton(sp => new TranscriptionCoordinator(
+            sp.GetRequiredService<TranscriptionCache>(),
+            sp.GetRequiredService<TranscriptionQueue>(),
+            sp.GetRequiredService<IAudioExtractorService>(),
+            sp.GetRequiredService<ITranscriberFactory>(),
+            sp.GetRequiredService<ModelDownloader>(),
+            sp.GetRequiredService<SettingsStore>(),
+            sp.GetRequiredService<LyricsViewModel>(),
+            action => Current.Dispatcher.BeginInvoke(action)));
 
         services.AddSingleton<PlaybackViewModel>();
         services.AddSingleton<LyricsViewModel>();
@@ -81,6 +95,14 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         Log.Information("YomiagePlayer 終了");
+        // graceful shutdown: 進行中の解析をキャンセルし、一時WAVを掃除
+        try
+        {
+            _services?.GetService<TranscriptionCoordinator>()?
+                .ShutdownAsync().Wait(TimeSpan.FromSeconds(5));
+        }
+        catch { }
+        _services?.GetService<AudioExtractor>()?.CleanupTemp();
         _services?.GetService<PlaybackService>()?.Dispose();
         _services?.Dispose();
         Log.CloseAndFlush();

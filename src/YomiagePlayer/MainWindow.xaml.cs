@@ -28,6 +28,11 @@ public partial class MainWindow : Window
     /// <summary>再生対象が切り替わった。TranscriptionCoordinatorが購読する。</summary>
     public event Action<string>? MediaChanged;
 
+    /// <summary>再解析要求(プレイリスト右クリック/歌詞パネルの再解析ボタン)。</summary>
+    public event Action<string>? ReanalyzeRequested;
+
+    private string? _currentMediaPath;
+
     public MainWindow(
         PlaybackService playback,
         PlaybackViewModel playbackVm,
@@ -73,6 +78,12 @@ public partial class MainWindow : Window
             () => _lyricsVm.SetDuration(t.TotalSeconds));
 
         _playlistVm.PlayRequested += item => PlayFile(item.FilePath);
+        Playlist.ReanalyzeRequested += item => ReanalyzeRequested?.Invoke(item.FilePath);
+        _lyricsVm.ReanalyzeRequested += () =>
+        {
+            if (_currentMediaPath is not null)
+                ReanalyzeRequested?.Invoke(_currentMediaPath);
+        };
         _playbackVm.NextRequested += () => _playlistVm.PlayNext(manual: true);
         _playbackVm.PrevRequested += () => _playlistVm.PlayPrev();
         _playback.MediaEnded += () => Dispatcher.BeginInvoke(
@@ -99,6 +110,7 @@ public partial class MainWindow : Window
 
     public void PlayFile(string path)
     {
+        _currentMediaPath = path;
         _playback.Play(path);
         _playbackVm.NowPlayingTitle = Path.GetFileNameWithoutExtension(path);
         NowPlayingText.Text = "";
