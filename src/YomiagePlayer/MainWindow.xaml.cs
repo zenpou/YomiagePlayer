@@ -112,7 +112,50 @@ public partial class MainWindow : Window
         _playbackVm.NowPlayingTitle = Path.GetFileNameWithoutExtension(path);
         NowPlayingText.Text = "";
         Title = $"{_playbackVm.NowPlayingTitle} - YomiagePlayer";
+        UpdateArtwork(path);
         MediaChanged?.Invoke(path);
+    }
+
+    /// <summary>
+    /// 音声ファイルならアートワーク(メタデータ埋め込み → 同フォルダ画像)を
+    /// 映像エリアに表示する。動画・画像なしの場合は非表示。
+    /// </summary>
+    private void UpdateArtwork(string path)
+    {
+        ArtworkImage.Source = null;
+        ArtworkImage.Visibility = Visibility.Collapsed;
+        if (!MediaFiles.IsAudio(path)) return;
+
+        _ = Task.Run(() =>
+        {
+            System.Windows.Media.Imaging.BitmapImage? image = null;
+            try
+            {
+                var bytes = ArtworkLocator.FindArtwork(path);
+                if (bytes is not null)
+                {
+                    using var ms = new MemoryStream(bytes);
+                    var bmp = new System.Windows.Media.Imaging.BitmapImage();
+                    bmp.BeginInit();
+                    bmp.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                    bmp.StreamSource = ms;
+                    bmp.EndInit();
+                    bmp.Freeze(); // バックグラウンドスレッド生成のためUIスレッドへ渡す前に必須
+                    image = bmp;
+                }
+            }
+            catch
+            {
+                // 壊れた画像データ等。アートワークなしとして扱う
+            }
+            if (image is null) return;
+            Dispatcher.BeginInvoke(() =>
+            {
+                if (_currentMediaPath != path) return; // 既に別トラックへ切替済み
+                ArtworkImage.Source = image;
+                ArtworkImage.Visibility = Visibility.Visible;
+            });
+        });
     }
 
     private void OpenFile_Click(object sender, RoutedEventArgs e)
