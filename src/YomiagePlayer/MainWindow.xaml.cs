@@ -147,11 +147,10 @@ public partial class MainWindow : Window
             .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-    private void Settings_Click(object sender, RoutedEventArgs e)
-    {
-        // Task 17で実装
-        MessageBox.Show("設定画面は未実装です", "YomiagePlayer");
-    }
+    /// <summary>設定画面を開く要求。App側でSettingsWindowを生成して表示する。</summary>
+    public event Action? SettingsRequested;
+
+    private void Settings_Click(object sender, RoutedEventArgs e) => SettingsRequested?.Invoke();
 
     private void Exit_Click(object sender, RoutedEventArgs e) => Close();
 

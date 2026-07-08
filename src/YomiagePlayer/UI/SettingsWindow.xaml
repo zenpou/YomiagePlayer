@@ -1,0 +1,80 @@
+<Window x:Class="YomiagePlayer.UI.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:YomiagePlayer.ViewModels"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance Type=vm:SettingsViewModel}"
+        Title="設定 - YomiagePlayer" Height="480" Width="560"
+        WindowStartupLocation="CenterOwner" Background="#1E1E1E">
+    <TabControl Margin="8" Background="Transparent">
+        <TabItem Header="音声認識">
+            <StackPanel Margin="16">
+                <TextBlock Text="Whisperモデル" Foreground="#EEE" FontWeight="Bold" />
+                <TextBlock Foreground="#999" TextWrapping="Wrap" Margin="0,4,0,8"
+                           Text="モデル変更は次の解析から反映されます。解析済みキャッシュはモデルごとに保持されます。" />
+                <ComboBox ItemsSource="{Binding Models}"
+                          SelectedItem="{Binding SelectedModel, Mode=TwoWay}"
+                          DisplayMemberPath="DisplayName" Width="320" HorizontalAlignment="Left" />
+
+                <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                    <TextBlock Foreground="#CCC" VerticalAlignment="Center">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Text" Value="⚠ モデル未ダウンロード" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsSelectedModelDownloaded}" Value="True">
+                                        <Setter Property="Text" Value="✔ ダウンロード済み" />
+                                        <Setter Property="Foreground" Value="#6A9955" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <Button Content="ダウンロード" Margin="12,0,0,0" Padding="12,4"
+                            Command="{Binding DownloadSelectedCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsSelectedModelDownloaded}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsDownloading}" Value="True">
+                                        <Setter Property="IsEnabled" Value="False" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                </StackPanel>
+
+                <StackPanel Margin="0,8,0,0"
+                            Visibility="{Binding IsDownloading, Converter={StaticResource BoolToVisibility}}">
+                    <ProgressBar Height="12" Minimum="0" Maximum="100"
+                                 Value="{Binding DownloadProgress, Mode=OneWay}" />
+                    <TextBlock Foreground="#999" Margin="0,4,0,0">
+                        <Run Text="ダウンロード中... " /><Run Text="{Binding DownloadProgress, Mode=OneWay, StringFormat={}{0:F0}}" /><Run Text="%" />
+                    </TextBlock>
+                </StackPanel>
+                <TextBlock Foreground="#F48771" TextWrapping="Wrap" Margin="0,8,0,0"
+                           Text="{Binding DownloadError}" />
+
+                <Separator Margin="0,16" />
+                <TextBlock Foreground="#EEE" FontWeight="Bold" Text="実行環境" />
+                <TextBlock Foreground="#CCC" Margin="0,4,0,0">
+                    <Run Text="使用ランタイム: " /><Run Text="{Binding LoadedRuntime, Mode=OneWay}" />
+                </TextBlock>
+                <TextBlock Foreground="#999" TextWrapping="Wrap" Margin="0,4,0,0"
+                           Text="CUDA → Vulkan → CPU の順に自動選択されます。" />
+            </StackPanel>
+        </TabItem>
+
+        <TabItem Header="ライセンス">
+            <TextBox Margin="8" IsReadOnly="True" TextWrapping="Wrap"
+                     VerticalScrollBarVisibility="Auto"
+                     Background="#252526" Foreground="#CCC" BorderThickness="0"
+                     Text="{Binding LicensesText, Mode=OneWay}" />
+        </TabItem>
+    </TabControl>
+</Window>
