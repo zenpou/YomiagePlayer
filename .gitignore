@@ -6,6 +6,9 @@
 # dotenv files
 .env
 
+# Distributable build output (scripts/publish.ps1)
+dist/
+
 # User-specific files
 *.rsuser
 *.suo
