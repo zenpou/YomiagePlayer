@@ -17,24 +17,40 @@ public partial class MainWindow : Window
     private readonly PlaybackService _playback;
     private readonly PlaybackViewModel _playbackVm;
     private readonly LyricsViewModel _lyricsVm;
+    private readonly PlaylistViewModel _playlistVm;
 
-    /// <summary>ファイルが開かれた(D&D/ダイアログ)。後続タスクでプレイリスト/解析へ接続する。</summary>
+    /// <summary>ファイルが開かれた(D&D/ダイアログ/引数)。</summary>
     public event Action<IReadOnlyList<string>>? FilesOpened;
 
-    public MainWindow(PlaybackService playback, PlaybackViewModel playbackVm, LyricsViewModel lyricsVm)
+    /// <summary>再生対象が切り替わった。TranscriptionCoordinatorが購読する。</summary>
+    public event Action<string>? MediaChanged;
+
+    public MainWindow(
+        PlaybackService playback,
+        PlaybackViewModel playbackVm,
+        LyricsViewModel lyricsVm,
+        PlaylistViewModel playlistVm)
     {
         InitializeComponent();
         _playback = playback;
         _playbackVm = playbackVm;
         _lyricsVm = lyricsVm;
+        _playlistVm = playlistVm;
         Controls.DataContext = playbackVm;
         Lyrics.DataContext = lyricsVm;
+        Playlist.DataContext = playlistVm;
 
         _lyricsVm.SeekRequested += s => _playback.SeekTo(TimeSpan.FromSeconds(s));
         _playback.PositionChanged += t => Dispatcher.BeginInvoke(
             () => _lyricsVm.UpdatePosition(t.TotalSeconds));
         _playback.LengthKnown += t => Dispatcher.BeginInvoke(
             () => _lyricsVm.SetDuration(t.TotalSeconds));
+
+        _playlistVm.PlayRequested += item => PlayFile(item.FilePath);
+        _playbackVm.NextRequested += () => _playlistVm.PlayNext(manual: true);
+        _playbackVm.PrevRequested += () => _playlistVm.PlayPrev();
+        _playback.MediaEnded += () => Dispatcher.BeginInvoke(
+            () => _playlistVm.PlayNext(manual: false));
 
         Loaded += (_, _) =>
         {
@@ -46,11 +62,12 @@ public partial class MainWindow : Window
                 FilesOpened?.Invoke(args);
         };
 
-        // Task 18でTranscriptionCoordinator/Playlistに置き換えるまでの仮接続: 開いたら即再生
+        // 開いたファイルはプレイリストへ置換投入して先頭を再生
         FilesOpened += files =>
         {
             if (files.Count == 0) return;
-            PlayFile(files[0]);
+            _playlistVm.ReplaceAll(files);
+            _playlistVm.PlayItem(_playlistVm.Items[0]);
         };
     }
 
@@ -60,6 +77,7 @@ public partial class MainWindow : Window
         _playbackVm.NowPlayingTitle = Path.GetFileNameWithoutExtension(path);
         NowPlayingText.Text = "";
         Title = $"{_playbackVm.NowPlayingTitle} - YomiagePlayer";
+        MediaChanged?.Invoke(path);
     }
 
     private void OpenFile_Click(object sender, RoutedEventArgs e)

@@ -34,7 +34,7 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
                 <ContentControl x:Name="LibraryHost" Grid.Row="0" />
-                <ContentControl x:Name="PlaylistHost" Grid.Row="1" />
+                <ui:PlaylistPane x:Name="Playlist" Grid.Row="1" />
             </Grid>
 
             <GridSplitter Grid.Column="1" HorizontalAlignment="Stretch" Background="#333" />
