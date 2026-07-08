@@ -50,6 +50,13 @@ public partial class App : Application
         _services.GetRequiredService<AudioExtractor>().CleanupTemp();
 
         var window = _services.GetRequiredService<MainWindow>();
+        window.SettingsRequested += () =>
+        {
+            var settings = new UI.SettingsWindow(
+                _services.GetRequiredService<SettingsViewModel>())
+            { Owner = window };
+            settings.ShowDialog();
+        };
         window.Show();
     }
 
@@ -67,6 +74,7 @@ public partial class App : Application
         services.AddSingleton<LyricsViewModel>();
         services.AddSingleton<PlaylistViewModel>();
         services.AddSingleton<LibraryViewModel>();
+        services.AddSingleton<SettingsViewModel>();
         services.AddSingleton<MainWindow>();
     }
 
