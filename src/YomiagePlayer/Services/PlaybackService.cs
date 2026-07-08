@@ -10,6 +10,9 @@ public sealed class PlaybackService : IDisposable
 {
     private readonly LibVLC _libVlc;
 
+    /// <summary>停止/終了状態からのシーク要求。再生開始(Playing)後に適用する。</summary>
+    private TimeSpan? _pendingSeek;
+
     public MediaPlayer Player { get; }
 
     public event Action<TimeSpan>? PositionChanged;
@@ -26,7 +29,15 @@ public sealed class PlaybackService : IDisposable
         Player.TimeChanged += (_, e) => PositionChanged?.Invoke(TimeSpan.FromMilliseconds(e.Time));
         Player.LengthChanged += (_, e) => LengthKnown?.Invoke(TimeSpan.FromMilliseconds(e.Length));
         Player.EndReached += (_, _) => MediaEnded?.Invoke();
-        Player.Playing += (_, _) => PlayingChanged?.Invoke(true);
+        Player.Playing += (_, _) =>
+        {
+            PlayingChanged?.Invoke(true);
+            if (_pendingSeek is { } pending)
+            {
+                _pendingSeek = null;
+                Player.Time = (long)pending.TotalMilliseconds;
+            }
+        };
         Player.Paused += (_, _) => PlayingChanged?.Invoke(false);
         Player.Stopped += (_, _) => PlayingChanged?.Invoke(false);
     }
@@ -47,8 +58,17 @@ public sealed class PlaybackService : IDisposable
 
     public void TogglePause()
     {
-        if (Player.IsPlaying) Player.SetPause(true);
-        else if (Player.Media is not null) Player.SetPause(false);
+        if (Player.IsPlaying)
+        {
+            Player.SetPause(true);
+        }
+        else if (Player.Media is not null)
+        {
+            if (Player.State is VLCState.Ended or VLCState.Stopped)
+                Restart();
+            else
+                Player.SetPause(false);
+        }
     }
 
     /// <summary>EndReachedハンドラ内などVLCコールバック中のStopはデッドロックするためThreadPoolで実行。</summary>
@@ -56,9 +76,32 @@ public sealed class PlaybackService : IDisposable
 
     public void SeekTo(TimeSpan position)
     {
-        if (Player.Media is not null && Player.IsSeekable)
+        if (Player.Media is null) return;
+
+        if (Player.State is VLCState.Ended or VLCState.Stopped)
+        {
+            // 停止/終了状態ではTime設定が効かないため、再生を再開してから適用する
+            _pendingSeek = position;
+            Restart();
+        }
+        else if (Player.IsSeekable)
+        {
             Player.Time = (long)position.TotalMilliseconds;
+        }
+        else
+        {
+            // メディアオープン直後などまだシーク不可の場合はPlayingで適用
+            _pendingSeek = position;
+        }
     }
+
+    /// <summary>Ended/Stoppedから同じメディアを再生し直す。VLCコールバックとのデッドロック回避のためThreadPoolで実行。</summary>
+    private void Restart()
+        => ThreadPool.QueueUserWorkItem(_ =>
+        {
+            Player.Stop();
+            Player.Play();
+        });
 
     public void Dispose()
     {
