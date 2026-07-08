@@ -52,6 +52,18 @@ src\YomiagePlayer\bin\Debug\net10.0-windows\YomiagePlayer.exe "C:\path\to\file.m
 dotnet test
 ```
 
+## 配布用バイナリのビルド
+
+自己完結(.NETランタイム同梱)の配布用パッケージを作成します。ffmpeg(`tools/ffmpeg/`)とサードパーティライセンス表記を同梱し、対象アーキテクチャ以外のネイティブファイル(LibVLC/Whisperが全RID分を無条件出力するため)を取り除いた上でZIP化します。
+
+```powershell
+.\scripts\publish.ps1
+```
+
+出力先: `dist\win-x64\`(展開済み)、`dist\YomiagePlayer-win-x64.zip`(圧縮済み、配布用)。ZIP作成をスキップする場合は `-SkipZip` を付けます。
+
+Whisperモデルは配布物に含まれません。配布先のPCで初回起動後、設定画面からダウンロードしてもらう必要があります。
+
 ## プロジェクト構成
 
 ```

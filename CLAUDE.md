@@ -67,6 +67,12 @@ Both `TranscriptionCache.Save` and `SettingsStore.Save` write to `{path}.tmp` th
 
 Don't use PowerShell (`Get-Content`/`Set-Content`) to bulk-edit source files containing Japanese text — PS 5.1 misreads BOM-less UTF-8 as ANSI and corrupts it silently. Use the Edit/Write tools instead. (This happened once and required restoring 4 test files from git.)
 
+The same corruption hits `.ps1` scripts themselves: Windows PowerShell 5.1 parses a BOM-less UTF-8 script using the system codepage, and Japanese text can corrupt into byte sequences that break tokenization (not just cosmetic mojibake — `scripts/publish.ps1` failed to parse at all until Japanese comments/messages were replaced with ASCII). Keep `.ps1` files ASCII-only unless you add a UTF-8 BOM.
+
+### Distributable build
+
+`scripts/publish.ps1` runs `dotnet publish --self-contained` for a single RID (default win-x64) into `dist/<rid>/`, then deletes the native-file trees for every *other* architecture. This pruning is necessary because LibVLCSharp copies `libvlc/{win-x64,win-x86,win-arm64}/` unconditionally and Whisper.net.Runtime.* copies `runtimes/{<rid>,cuda/<rid>,vulkan/<rid>}/` for win/linux/macos unconditionally — a RID-specific publish does not filter these on its own (verified: an unpruned publish is ~870MB). The script also copies `tools/ffmpeg/*.exe` into `dist/<rid>/ffmpeg/` (matching `FfmpegConfig.Configure`'s exe-adjacent lookup in `App.xaml.cs`) and `docs/licenses/THIRD-PARTY-NOTICES.md` into the output root (matching `SettingsViewModel.LoadLicensesText`'s exe-adjacent lookup). The Whisper model itself is never bundled — it's downloaded post-install via the Settings window.
+
 ## Design docs
 
 `docs/plans/` has the full design doc, implementation plan (task-by-task with exact test code), a Fable-model architecture review and its resolution, spike notes, and integration-checklist results — read these before making structural changes, they contain the reasoning behind decisions summarized above.
