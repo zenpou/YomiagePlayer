@@ -44,10 +44,11 @@ public sealed class PlaybackService : IDisposable
 
     public bool IsPlaying => Player.IsPlaying;
 
+    /// <summary>音量%。100が原音量、100超はVLCのソフトウェア増幅(最大150)。</summary>
     public int Volume
     {
         get => Player.Volume;
-        set => Player.Volume = Math.Clamp(value, 0, 100);
+        set => Player.Volume = Math.Clamp(value, 0, 150);
     }
 
     public void Play(string path)

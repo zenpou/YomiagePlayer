@@ -6,7 +6,7 @@ public record AppSettings
 {
     public List<string> RegisteredFolders { get; init; } = [];
     public string Model { get; init; } = "medium";
-    public int Volume { get; init; } = 80;
+    public int Volume { get; init; } = 100;
     public double WindowWidth { get; init; } = 1200;
     public double WindowHeight { get; init; } = 720;
 }

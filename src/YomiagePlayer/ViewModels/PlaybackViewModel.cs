@@ -17,7 +17,7 @@ public partial class PlaybackViewModel : ObservableObject
     private double _durationSeconds;
 
     [ObservableProperty]
-    private int _volume = 80;
+    private int _volume = 100;
 
     [ObservableProperty]
     private bool _isPlaying;
