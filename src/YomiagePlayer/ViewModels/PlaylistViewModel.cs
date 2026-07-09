@@ -18,6 +18,9 @@ public partial class PlaylistItem(string filePath) : ObservableObject
     public string FilePath { get; } = filePath;
     public string DisplayName { get; } = Path.GetFileNameWithoutExtension(filePath);
 
+    /// <summary>格納フォルダのフルパス。プレイリストのフォルダ見出しグループ化キー。</summary>
+    public string FolderPath { get; } = Path.GetDirectoryName(filePath) ?? string.Empty;
+
     [ObservableProperty]
     private bool _isPlaying;
 }

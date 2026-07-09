@@ -116,23 +116,29 @@ public partial class MainWindow : Window
         MediaChanged?.Invoke(path);
     }
 
+    private List<System.Windows.Media.Imaging.BitmapImage> _artworkImages = [];
+    private int _artworkIndex;
+
     /// <summary>
-    /// 音声ファイルならアートワーク(メタデータ埋め込み → 同フォルダ画像)を
-    /// 映像エリアに表示する。動画・画像なしの場合は非表示。
+    /// 音声ファイルならアートワーク(メタデータ埋め込み → 同フォルダ画像、複数あれば全件)を
+    /// 映像エリアに表示する。動画・画像なしの場合は非表示。複数枚あれば矢印で切り替え可能。
     /// </summary>
     private void UpdateArtwork(string path)
     {
         ArtworkImage.Source = null;
         ArtworkImage.Visibility = Visibility.Collapsed;
+        ArtworkNav.Visibility = Visibility.Collapsed;
+        _artworkImages = [];
+        _artworkIndex = 0;
         if (!MediaFiles.IsAudio(path)) return;
 
+        var libraryRoot = FindLibraryRootFor(path);
         _ = Task.Run(() =>
         {
-            System.Windows.Media.Imaging.BitmapImage? image = null;
-            try
+            var images = new List<System.Windows.Media.Imaging.BitmapImage>();
+            foreach (var bytes in ArtworkLocator.FindAllArtwork(path, libraryRoot))
             {
-                var bytes = ArtworkLocator.FindArtwork(path);
-                if (bytes is not null)
+                try
                 {
                     using var ms = new MemoryStream(bytes);
                     var bmp = new System.Windows.Media.Imaging.BitmapImage();
@@ -141,21 +147,60 @@ public partial class MainWindow : Window
                     bmp.StreamSource = ms;
                     bmp.EndInit();
                     bmp.Freeze(); // バックグラウンドスレッド生成のためUIスレッドへ渡す前に必須
-                    image = bmp;
+                    images.Add(bmp);
+                }
+                catch
+                {
+                    // 壊れた画像データはスキップ(他の候補があれば使う)
                 }
             }
-            catch
-            {
-                // 壊れた画像データ等。アートワークなしとして扱う
-            }
-            if (image is null) return;
+            if (images.Count == 0) return;
             Dispatcher.BeginInvoke(() =>
             {
                 if (_currentMediaPath != path) return; // 既に別トラックへ切替済み
-                ArtworkImage.Source = image;
-                ArtworkImage.Visibility = Visibility.Visible;
+                _artworkImages = images;
+                _artworkIndex = 0;
+                ShowCurrentArtwork();
             });
         });
+    }
+
+    private void ShowCurrentArtwork()
+    {
+        if (_artworkImages.Count == 0) return;
+        ArtworkImage.Source = _artworkImages[_artworkIndex];
+        ArtworkImage.Visibility = Visibility.Visible;
+        ArtworkNav.Visibility = _artworkImages.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
+        ArtworkCounter.Text = $"{_artworkIndex + 1} / {_artworkImages.Count}";
+    }
+
+    private void ArtworkPrev_Click(object sender, RoutedEventArgs e)
+    {
+        if (_artworkImages.Count == 0) return;
+        _artworkIndex = (_artworkIndex - 1 + _artworkImages.Count) % _artworkImages.Count;
+        ShowCurrentArtwork();
+    }
+
+    private void ArtworkNext_Click(object sender, RoutedEventArgs e)
+    {
+        if (_artworkImages.Count == 0) return;
+        _artworkIndex = (_artworkIndex + 1) % _artworkImages.Count;
+        ShowCurrentArtwork();
+    }
+
+    /// <summary>mediaPathを含むライブラリ登録フォルダを返す(複数一致する場合は最も深いもの)。なければnull。</summary>
+    private string? FindLibraryRootFor(string mediaPath)
+    {
+        string? best = null;
+        foreach (var folder in _libraryVm.FolderPaths)
+        {
+            var normalized = folder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var prefix = normalized + Path.DirectorySeparatorChar;
+            if (mediaPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                && (best is null || normalized.Length > best.Length))
+                best = normalized;
+        }
+        return best;
     }
 
     private void OpenFile_Click(object sender, RoutedEventArgs e)
@@ -167,9 +212,9 @@ public partial class MainWindow : Window
 
     private void OpenFolder_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new OpenFolderDialog();
-        if (dialog.ShowDialog() == true)
-            FilesOpened?.Invoke(EnumerateMediaFiles(dialog.FolderName));
+        var folder = FolderPicker.PickFolder();
+        if (folder is not null)
+            FilesOpened?.Invoke(EnumerateMediaFiles(folder));
     }
 
     private void RestoreSettings()

@@ -65,6 +65,10 @@ public partial class App : Application
         // アイドル時にライブラリの未解析ファイルをバックグラウンド解析
         var idleAnalysis = _services.GetRequiredService<IdleAnalysisService>();
         _services.GetRequiredService<LibraryViewModel>().FoldersChanged += idleAnalysis.ResetVisited;
+        // モデル未ダウンロードで見送られたファイルも、ダウンロード完了/モデル切替後に再走査させる
+        var settingsVm = _services.GetRequiredService<SettingsViewModel>();
+        settingsVm.ModelDownloaded += idleAnalysis.ResetVisited;
+        settingsVm.ModelChanged += _ => idleAnalysis.ResetVisited();
         idleAnalysis.Start();
     }
 

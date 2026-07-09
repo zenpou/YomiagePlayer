@@ -70,10 +70,25 @@
                     <MenuItem Header="削除" Click="Remove_Click" />
                     <MenuItem Header="再解析" Click="Reanalyze_Click" />
                     <Separator />
+                    <MenuItem Header="エクスプローラーで表示" Click="ShowInExplorer_Click" />
+                    <Separator />
                     <MenuItem Header="プレイリストを保存..." Click="Save_Click" />
                     <MenuItem Header="プレイリストを読み込み..." Click="Load_Click" />
                 </ContextMenu>
             </ListBox.ContextMenu>
+            <ListBox.GroupStyle>
+                <GroupStyle>
+                    <GroupStyle.HeaderTemplate>
+                        <DataTemplate>
+                            <Border Background="#252526" Padding="6,3" Margin="0,4,0,0">
+                                <TextBlock Text="{Binding Name, Converter={StaticResource FolderPathToName}}"
+                                           Foreground="#9CDCFE" FontSize="11" FontWeight="Bold"
+                                           TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}" />
+                            </Border>
+                        </DataTemplate>
+                    </GroupStyle.HeaderTemplate>
+                </GroupStyle>
+            </ListBox.GroupStyle>
             <ListBox.ItemTemplate>
                 <DataTemplate>
                     <Grid Margin="2">

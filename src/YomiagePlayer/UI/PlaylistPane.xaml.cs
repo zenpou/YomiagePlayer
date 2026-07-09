@@ -1,7 +1,10 @@
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using Microsoft.Win32;
+using YomiagePlayer.Services;
 using YomiagePlayer.ViewModels;
 
 namespace YomiagePlayer.UI;
@@ -18,6 +21,14 @@ public partial class PlaylistPane : UserControl
     public PlaylistPane()
     {
         InitializeComponent();
+        // フォルダ構造再現: 同一フォルダのファイルをまとめ、見出しで区切る
+        DataContextChanged += (_, _) =>
+        {
+            if (Vm is null) return;
+            var view = CollectionViewSource.GetDefaultView(Vm.Items);
+            view.GroupDescriptions.Clear();
+            view.GroupDescriptions.Add(new PropertyGroupDescription(nameof(PlaylistItem.FolderPath)));
+        };
     }
 
     private void List_MouseDoubleClick(object sender, MouseButtonEventArgs e)
@@ -36,6 +47,12 @@ public partial class PlaylistPane : UserControl
     {
         if (List.SelectedItem is PlaylistItem item)
             ReanalyzeRequested?.Invoke(item);
+    }
+
+    private void ShowInExplorer_Click(object sender, RoutedEventArgs e)
+    {
+        if (List.SelectedItem is PlaylistItem item)
+            ExplorerLauncher.ShowFile(item.FilePath);
     }
 
     private void Save_Click(object sender, RoutedEventArgs e)

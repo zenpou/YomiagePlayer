@@ -47,6 +47,9 @@ public partial class SettingsViewModel : ObservableObject
     /// <summary>モデル設定が変更された(次の解析から反映)。</summary>
     public event Action<WhisperModel>? ModelChanged;
 
+    /// <summary>モデルのダウンロードが完了した(未ダウンロードで見送られていたアイドル解析の再開に使う)。</summary>
+    public event Action? ModelDownloaded;
+
     public SettingsViewModel(SettingsStore store, ModelDownloader downloader)
     {
         _store = store;
@@ -87,6 +90,7 @@ public partial class SettingsViewModel : ObservableObject
                 CancellationToken.None);
             SelectedModel.Refresh(_downloader);
             OnPropertyChanged(nameof(IsSelectedModelDownloaded));
+            ModelDownloaded?.Invoke();
         }
         catch (Exception ex)
         {

@@ -1,7 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using Microsoft.Win32;
+using YomiagePlayer.Services;
 using YomiagePlayer.ViewModels;
 
 namespace YomiagePlayer.UI;
@@ -17,9 +17,9 @@ public partial class LibraryPane : UserControl
 
     private void AddFolder_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new OpenFolderDialog();
-        if (dialog.ShowDialog() == true)
-            Vm?.AddFolder(dialog.FolderName);
+        var folder = FolderPicker.PickFolder();
+        if (folder is not null)
+            Vm?.AddFolder(folder);
     }
 
     private void List_MouseDoubleClick(object sender, MouseButtonEventArgs e)
@@ -45,5 +45,11 @@ public partial class LibraryPane : UserControl
     {
         if (List.SelectedItem is LibraryFolder folder)
             Vm?.RemoveFolderCommand.Execute(folder);
+    }
+
+    private void OpenInExplorer_Click(object sender, RoutedEventArgs e)
+    {
+        if (List.SelectedItem is LibraryFolder folder)
+            ExplorerLauncher.OpenFolder(folder.Path);
     }
 }

@@ -138,6 +138,47 @@ public class IdleAnalysisServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ScanOnce_ModelNotDownloadedYet_ResetVisitedAfterDownloadAllowsRetry()
+    {
+        // モデル未ダウンロードのcoordinator/queueを別途組み立てる(このテストクラスの
+        // 既定セットアップはコンストラクタでmediumモデルをダウンロード済み扱いにしているため)
+        var dir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        var libDir = Path.Combine(dir, "library");
+        Directory.CreateDirectory(libDir);
+        try
+        {
+            var cache = new TranscriptionCache(Path.Combine(dir, "cache"));
+            var queue = new TranscriptionQueue();
+            var modelsDir = Path.Combine(dir, "models");
+            Directory.CreateDirectory(modelsDir);
+            var downloader = new ModelDownloader(new System.Net.Http.HttpClient(), modelsDir);
+            var coordinator = new TranscriptionCoordinator(
+                cache, queue, new FakeExtractor(dir), new FakeTranscriberFactory(),
+                downloader, new SettingsStore(Path.Combine(dir, "settings.json")),
+                new LyricsViewModel(), uiInvoke: a => a());
+
+            var f1 = Path.Combine(libDir, "a.mp3");
+            File.WriteAllBytes(f1, Guid.NewGuid().ToByteArray());
+            var svc = new IdleAnalysisService(coordinator, queue, () => [libDir]);
+
+            // モデル未ダウンロード: スキャンしても何も解析されない
+            Assert.False(await svc.ScanOnceAsync());
+            // ファイルは既に「見た」扱いになっているので、モデルを後から置いても
+            // ResetVisitedしない限り再走査されない
+            File.WriteAllText(downloader.PathFor(WhisperModel.Medium), "dummy");
+            Assert.False(await svc.ScanOnceAsync());
+
+            // ダウンロード完了イベント相当のResetVisitedで再走査が有効になる
+            svc.ResetVisited();
+            Assert.True(await svc.ScanOnceAsync());
+        }
+        finally
+        {
+            try { Directory.Delete(dir, true); } catch { }
+        }
+    }
+
+    [Fact]
     public async Task ResetVisited_AllowsRescan()
     {
         var f1 = AddLibraryFile("a.mp3");

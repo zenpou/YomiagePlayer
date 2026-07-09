@@ -4,6 +4,7 @@
              xmlns:ui="clr-namespace:YomiagePlayer.UI">
     <Application.Resources>
         <ui:SecondsToTimeSpanConverter x:Key="SecondsToTimeSpan" />
+        <ui:FolderPathToNameConverter x:Key="FolderPathToName" />
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
 
         <Style x:Key="PlayerButton" TargetType="Button">

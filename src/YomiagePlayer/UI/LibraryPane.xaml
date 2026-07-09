@@ -33,6 +33,8 @@
                     <MenuItem Header="プレイリストへ展開(置換)" Click="OpenReplace_Click" />
                     <MenuItem Header="プレイリストへ追加" Click="OpenAppend_Click" />
                     <Separator />
+                    <MenuItem Header="エクスプローラーで開く" Click="OpenInExplorer_Click" />
+                    <Separator />
                     <MenuItem Header="ライブラリから削除" Click="RemoveFolder_Click" />
                 </ContextMenu>
             </ListBox.ContextMenu>
