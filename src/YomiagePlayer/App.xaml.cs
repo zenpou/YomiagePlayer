@@ -95,7 +95,8 @@ public partial class App : Application
         services.AddSingleton(sp => new IdleAnalysisService(
             sp.GetRequiredService<TranscriptionCoordinator>(),
             sp.GetRequiredService<TranscriptionQueue>(),
-            () => sp.GetRequiredService<LibraryViewModel>().FolderPaths.ToList()));
+            () => sp.GetRequiredService<LibraryViewModel>().FolderPaths.ToList(),
+            () => sp.GetRequiredService<PlaylistViewModel>().UpcomingFiles.ToList()));
 
         services.AddSingleton<PlaybackViewModel>();
         services.AddSingleton<LyricsViewModel>();

@@ -27,4 +27,18 @@ public static class FolderPicker
         };
         return dialog.ShowDialog() == true ? Path.GetDirectoryName(dialog.FileName) : null;
     }
+
+    /// <summary>
+    /// 複数フォルダを一度に選ばせる。ネイティブのフォルダ選択ダイアログ(複数選択対応)を使うため、
+    /// PickFolderと違い中のファイル一覧は確認できないトレードオフがある。キャンセル時は空配列。
+    /// </summary>
+    public static IReadOnlyList<string> PickFolders(string title = "フォルダを選択(複数選択可)")
+    {
+        var dialog = new OpenFolderDialog
+        {
+            Title = title,
+            Multiselect = true,
+        };
+        return dialog.ShowDialog() == true ? dialog.FolderNames : [];
+    }
 }

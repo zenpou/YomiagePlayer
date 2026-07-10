@@ -16,6 +16,10 @@ public partial class LibraryViewModel : ObservableObject
 {
     public ObservableCollection<LibraryFolder> Folders { get; } = [];
 
+    /// <summary>登録フォルダ一覧を絞り込む検索文字列(部分一致)。空なら全件表示。</summary>
+    [ObservableProperty]
+    private string _searchText = string.Empty;
+
     /// <summary>フォルダ内のメディアをプレイリストへ投入する要求(replace=置換/追加)。</summary>
     public event Action<IReadOnlyList<string>, bool>? FilesRequested;
 
@@ -30,12 +34,20 @@ public partial class LibraryViewModel : ObservableObject
 
     public IEnumerable<string> FolderPaths => Folders.Select(f => f.Path);
 
-    public void AddFolder(string path)
+    public void AddFolder(string path) => AddFolders([path]);
+
+    public void AddFolders(IEnumerable<string> paths)
     {
-        if (Folders.Any(f => string.Equals(f.Path, path, StringComparison.OrdinalIgnoreCase)))
-            return;
-        Folders.Add(new LibraryFolder(path));
-        FoldersChanged?.Invoke();
+        var added = false;
+        foreach (var path in paths)
+        {
+            if (Folders.Any(f => string.Equals(f.Path, path, StringComparison.OrdinalIgnoreCase)))
+                continue;
+            Folders.Add(new LibraryFolder(path));
+            added = true;
+        }
+        if (added)
+            FoldersChanged?.Invoke();
     }
 
     [RelayCommand]

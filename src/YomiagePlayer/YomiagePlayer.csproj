@@ -20,6 +20,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <!-- UI文字列は全てハードコードの日本語(.resxローカライズ未使用)なので、
+         .NET/WPF標準の他言語衛星リソースアセンブリは配布に含めない -->
+    <SatelliteResourceLanguages>ja</SatelliteResourceLanguages>
   </PropertyGroup>
 
   <ItemGroup>

@@ -24,14 +24,21 @@ public class TranscriptionCoordinatorTests : IDisposable
         _cache = new TranscriptionCache(Path.Combine(_dir, "cache"));
     }
 
-    private sealed class FakeExtractor(string dir, bool fail = false) : IAudioExtractorService
+    private sealed class FakeExtractor(
+        string dir, bool fail = false, string? blockPath = null, TaskCompletionSource? started = null)
+        : IAudioExtractorService
     {
-        public Task<string> ExtractWavAsync(string mediaPath, CancellationToken ct)
+        public async Task<string> ExtractWavAsync(string mediaPath, CancellationToken ct)
         {
             if (fail) throw new AudioExtractionException("no audio");
+            if (mediaPath == blockPath)
+            {
+                started?.TrySetResult();
+                await Task.Delay(Timeout.Infinite, ct); // preemptでキャンセルされるまで「解析中」を模擬
+            }
             var wav = Path.Combine(dir, Guid.NewGuid().ToString("N") + ".wav");
             File.WriteAllBytes(wav, new byte[32000 * 10]); // 10秒相当
-            return Task.FromResult(wav);
+            return wav;
         }
     }
 
@@ -162,20 +169,42 @@ public class TranscriptionCoordinatorTests : IDisposable
     }
 
     [Fact]
-    public async Task MediaSwitchDuringAnalysis_OldJobCachesButDoesNotTouchUi()
+    public async Task MediaSwitchDuringAnalysis_PreemptsOldJobAndSwitchesImmediately()
     {
+        // 1曲目の解析(抽出)が実際に走り出している状態を作ってから2曲目に切り替える。
+        // 1曲目はキャッシュ完了を待たずに即キャンセルされ、2曲目の解析にすぐ移行するはず
         var media2 = Path.Combine(_dir, "second.mp3");
         File.WriteAllBytes(media2, new byte[4096]);
 
-        var c = Create();
+        var settings = new SettingsStore(Path.Combine(_dir, "settings.json"));
+        var modelsDir = Path.Combine(_dir, "models");
+        var downloader = new ModelDownloader(new System.Net.Http.HttpClient(), modelsDir);
+        Directory.CreateDirectory(modelsDir);
+        File.WriteAllText(downloader.PathFor(WhisperModel.Medium), "dummy");
+
+        var started = new TaskCompletionSource();
+        var segments = new List<TranscriptSegment> { new(0, 3, "こんにちは"), new(3, 6, "テストです") };
+        var c = new TranscriptionCoordinator(
+            _cache,
+            new TranscriptionQueue(),
+            new FakeExtractor(_dir, blockPath: _mediaFile, started: started),
+            new FakeTranscriberFactory(segments),
+            downloader,
+            settings,
+            _lyricsVm,
+            uiInvoke: a => a());
+
         var t1 = c.OnMediaChangedAsync(_mediaFile);
-        var t2 = c.OnMediaChangedAsync(media2); // 即座に切替
+        await started.Task; // 1曲目の抽出(=解析)が実行中になるまで待つ
+
+        var t2 = c.OnMediaChangedAsync(media2);
         await Task.WhenAll(t1, t2);
 
-        // 両方ともキャッシュには保存される
-        Assert.True(_cache.TryLoad(ContentHasher.ComputeKey(_mediaFile), "medium", out _));
+        // 1曲目は完走前にキャンセルされ、キャッシュされない
+        Assert.False(_cache.TryLoad(ContentHasher.ComputeKey(_mediaFile), "medium", out _));
+        // 2曲目はすぐに解析されキャッシュされる
         Assert.True(_cache.TryLoad(ContentHasher.ComputeKey(media2), "medium", out _));
-        // UIは最後に開いた曲の分のみ(2セグメント。二重反映されていない)
+        // UIは2曲目の内容のみ
         Assert.Equal(2, _lyricsVm.Rows.Count);
     }
 

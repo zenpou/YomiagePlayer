@@ -1,5 +1,7 @@
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using YomiagePlayer.Services;
 using YomiagePlayer.ViewModels;
@@ -13,13 +15,27 @@ public partial class LibraryPane : UserControl
     public LibraryPane()
     {
         InitializeComponent();
+
+        DataContextChanged += (_, _) =>
+        {
+            if (Vm is not { } vm) return;
+            var view = CollectionViewSource.GetDefaultView(vm.Folders);
+            view.Filter = o => o is LibraryFolder f
+                && (string.IsNullOrEmpty(vm.SearchText)
+                    || f.DisplayName.Contains(vm.SearchText, StringComparison.OrdinalIgnoreCase));
+            vm.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(LibraryViewModel.SearchText))
+                    view.Refresh();
+            };
+        };
     }
 
     private void AddFolder_Click(object sender, RoutedEventArgs e)
     {
-        var folder = FolderPicker.PickFolder();
-        if (folder is not null)
-            Vm?.AddFolder(folder);
+        var folders = FolderPicker.PickFolders();
+        if (folders.Count > 0)
+            Vm?.AddFolders(folders);
     }
 
     private void List_MouseDoubleClick(object sender, MouseButtonEventArgs e)

@@ -16,9 +16,12 @@ public static class ArtworkLocator
         ["cover", "folder", "front", "album", "jacket", "artwork", "thumbnail"];
 
     // 音声を「MP3」「wav」等のサブフォルダに分け、画像は兄弟フォルダにまとめる
-    // 頒布物(同人音声作品など)がよくある構成のため、これらの名前の兄弟フォルダも探す
+    // 頒布物(同人音声作品など)がよくある構成のため、これらの名前の兄弟/配下フォルダも探す。
+    // 部分一致で判定するため(「①イメージ」のような連番接頭辞付きフォルダ名にも対応)、
+    // 英語の汎用語(「art」等)は除外し、誤検出しにくい語のみを残す
     private static readonly string[] ImageFolderNames =
-        ["photo", "photos", "image", "images", "img", "jacket", "jackets", "art", "artwork", "scan", "scans", "cover"];
+        ["photo", "photos", "image", "images", "img", "jacket", "jackets", "artwork", "scan", "scans", "cover",
+         "イメージ", "画像", "ジャケット", "パッケージ", "表紙", "ポスター"];
 
     // 親フォルダを何階層まで遡って表紙画像を探すか(例: 作品/mp3/SEあり/曲.mp3 のような
     // 多段サブフォルダでも作品フォルダ直下のthumbnail.jpgに辿り着けるようにする)。
@@ -81,13 +84,14 @@ public static class ArtworkLocator
 
     /// <summary>
     /// メディアと同じディレクトリから画像ファイルを探す。見つからなければ、
-    /// libraryRoot(ライブラリに登録されたフォルダ)が分かればその配下を再帰的に探す
-    /// (例: 作品フォルダをライブラリ登録した場合、作品フォルダ/mp3/曲.mp3 の表紙が
-    /// 作品フォルダ/thumbnail.jpg やサブフォルダ内のどこにあっても見つかる)。
+    /// libraryRoot(ライブラリに登録されたフォルダ)が分かればその配下の画像を
+    /// フォルダ名・ファイル名を問わず全て候補として返す(例: 作品フォルダをライブラリ登録した場合、
+    /// 作品フォルダ/mp3/曲.mp3 の表紙が作品フォルダ/thumbnail.jpg やどのサブフォルダにあっても見つかる)。
     /// libraryRootが不明なら、音声を「作品フォルダ/mp3/」やさらに「作品フォルダ/mp3/SEあり/」
     /// のように多段のサブフォルダに分けた構成を想定し祖先フォルダを辿るヒューリスティックと、
     /// 音声/画像をサブフォルダで分けた構成(例: 作品/MP3/曲.mp3 と 作品/photo/表紙.jpg)を
-    /// 想定した兄弟フォルダ探索にフォールバックする。
+    /// 想定した兄弟フォルダ探索にフォールバックする(こちらは無関係な画像を拾わないよう、
+    /// 同名/定番名/画像フォルダ名の一致がある場合のみ採用する)。
     /// 見つかったフォルダの画像を全件、優先順(メディアと同名 → 定番名 → 名前順)で先頭から返す。
     /// </summary>
     public static List<string> FindDirectoryImages(string mediaPath, string? libraryRoot = null)
@@ -100,13 +104,10 @@ public static class ArtworkLocator
 
         if (libraryRoot is not null && Directory.Exists(libraryRoot) && IsAncestorOf(libraryRoot, dir))
         {
-            // ライブラリ登録フォルダはユーザーが明示的に指定した境界なので、配下を
-            // 再帰的に探索してよい。ただし無関係な画像を拾わないよう、同名/定番名の
-            // 一致がある場合のみ採用する(「名前順で先頭」は適用しない)
+            // ライブラリ登録フォルダはユーザーが明示的に指定した境界なので、配下にある
+            // 画像はフォルダ名・ファイル名を問わず全て表紙候補として採用する(切り替え表示用)
             var libraryImages = ImagesUnder(libraryRoot);
-            if (libraryImages.Count > 0 && FindBestMatch(libraryImages, mediaPath, requireMatch: true) is not null)
-                return OrderBestFirst(libraryImages, mediaPath);
-            return [];
+            return libraryImages.Count > 0 ? OrderBestFirst(libraryImages, mediaPath) : [];
         }
 
         // libraryRootが不明な場合(ライブラリ経由で開かれていないファイル等)のヒューリスティック。
@@ -130,13 +131,17 @@ public static class ArtworkLocator
         foreach (var sibling in parent.GetDirectories())
         {
             if (string.Equals(sibling.FullName, dir, StringComparison.OrdinalIgnoreCase)) continue;
-            if (!ImageFolderNames.Contains(sibling.Name, StringComparer.OrdinalIgnoreCase)) continue;
+            if (!IsImageFolderName(sibling.Name)) continue;
             var siblingImages = ImagesIn(sibling.FullName);
             if (siblingImages.Count > 0) return OrderBestFirst(siblingImages, mediaPath);
         }
 
         return [];
     }
+
+    /// <summary>フォルダ名が画像専用フォルダの命名慣習(部分一致)に合致するか。</summary>
+    private static bool IsImageFolderName(string folderName) =>
+        ImageFolderNames.Any(name => folderName.Contains(name, StringComparison.OrdinalIgnoreCase));
 
     private static bool IsAncestorOf(string ancestorDir, string dir)
     {

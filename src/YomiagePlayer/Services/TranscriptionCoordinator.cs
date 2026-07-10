@@ -146,7 +146,9 @@ public sealed class TranscriptionCoordinator : IDisposable
 
         try
         {
-            await _queue.Enqueue(key, ct => RunJobAsync(mediaPath, key, model, ct))
+            // preempt: true — 実行中の別ジョブ(古いトラックの解析やアイドル先読み)があれば
+            // 即キャンセルし、ユーザーが今開いたこのトラックの解析にすぐ移行する
+            await _queue.Enqueue(key, ct => RunJobAsync(mediaPath, key, model, ct), preempt: true)
                 .ConfigureAwait(false);
             _uiInvoke(() =>
             {

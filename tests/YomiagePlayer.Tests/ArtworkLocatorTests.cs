@@ -167,17 +167,18 @@ public class ArtworkLocatorTests : IDisposable
     }
 
     [Fact]
-    public void FindDirectoryImage_LibraryRoot_IgnoresUnrecognizedNamesEvenWithinRoot()
+    public void FindDirectoryImage_LibraryRoot_FindsImageEvenWithUnrecognizedName()
     {
-        // ライブラリフォルダ配下でも、同名/定番名に一致しなければ採用しない
-        // (「名前順で先頭」を配下全体に適用すると無関係な画像を拾ってしまうため)
+        // ライブラリ登録フォルダはユーザーが明示的に指定した境界なので、
+        // 同名/定番名に一致しない画像でも配下にあれば候補として採用する
         var mp3Dir = Path.Combine(_dir, "mp3");
         Directory.CreateDirectory(mp3Dir);
         var media = Path.Combine(mp3Dir, "01_song.mp3");
         File.WriteAllBytes(media, FakeImageBytes);
-        File.WriteAllBytes(Path.Combine(_dir, "unrelated.jpg"), FakeImageBytes);
+        var expected = Path.Combine(_dir, "unrelated.jpg");
+        File.WriteAllBytes(expected, FakeImageBytes);
 
-        Assert.Null(ArtworkLocator.FindDirectoryImage(media, libraryRoot: _dir));
+        Assert.Equal(expected, ArtworkLocator.FindDirectoryImage(media, libraryRoot: _dir));
     }
 
     [Fact]
@@ -192,6 +193,56 @@ public class ArtworkLocatorTests : IDisposable
         File.WriteAllBytes(Path.Combine(_dir, "unrelated.jpg"), FakeImageBytes);
 
         Assert.Null(ArtworkLocator.FindDirectoryImage(media));
+    }
+
+    [Fact]
+    public void FindDirectoryImage_LibraryRoot_FindsImageInNumberedImageFolder()
+    {
+        // 実際の頒布構成: 作品フォルダ(=ライブラリ登録フォルダ)直下に曲.wavと
+        // 「①イメージ」フォルダがあり、画像ファイル名自体はメディア名にも
+        // 定番名にも一致しない(例: パッケージイラスト.png)
+        var media = CreateFile("01_song.wav");
+        var imageDir = Path.Combine(_dir, "①イメージ");
+        Directory.CreateDirectory(imageDir);
+        var expected = Path.Combine(imageDir, "パッケージイラスト.png");
+        File.WriteAllBytes(expected, FakeImageBytes);
+
+        Assert.Equal(expected, ArtworkLocator.FindDirectoryImage(media, libraryRoot: _dir));
+    }
+
+    [Fact]
+    public void FindDirectoryImage_LibraryRoot_FindsImageInUnrecognizedNamedFolder()
+    {
+        // 実際の頒布構成: 作品フォルダ(=ライブラリ登録フォルダ)/mp3/曲.mp3 と
+        // 作品フォルダ/omake/イラスト.jpg ("omake"はImageFolderNamesの語彙にない未知の命名でも見つかる)
+        var mp3Dir = Path.Combine(_dir, "mp3");
+        var omakeDir = Path.Combine(_dir, "omake");
+        Directory.CreateDirectory(mp3Dir);
+        Directory.CreateDirectory(omakeDir);
+        var media = Path.Combine(mp3Dir, "e15_01_song.mp3");
+        File.WriteAllBytes(media, FakeImageBytes);
+        var expected = Path.Combine(omakeDir, "e15_イラスト.jpg");
+        File.WriteAllBytes(expected, FakeImageBytes);
+        File.WriteAllBytes(Path.Combine(omakeDir, "e15_テキスト.txt"), FakeImageBytes); // 画像以外の付随ファイル
+
+        Assert.Equal(expected, ArtworkLocator.FindDirectoryImage(media, libraryRoot: _dir));
+    }
+
+    [Fact]
+    public void FindDirectoryImage_FallsBackToSiblingImageFolderWithNumberedJapaneseName()
+    {
+        // libraryRootが不明でも、「イメージ」等の名前を含む兄弟フォルダは
+        // 部分一致(連番接頭辞込み)で見つかる
+        var mp3Dir = Path.Combine(_dir, "MP3");
+        var imageDir = Path.Combine(_dir, "①イメージ");
+        Directory.CreateDirectory(mp3Dir);
+        Directory.CreateDirectory(imageDir);
+        var media = Path.Combine(mp3Dir, "01_song.mp3");
+        File.WriteAllBytes(media, FakeImageBytes);
+        var expected = Path.Combine(imageDir, "パッケージイラスト.png");
+        File.WriteAllBytes(expected, FakeImageBytes);
+
+        Assert.Equal(expected, ArtworkLocator.FindDirectoryImage(media));
     }
 
     [Fact]

@@ -74,8 +74,8 @@ public class IdleAnalysisServiceTests : IDisposable
         return path;
     }
 
-    private IdleAnalysisService CreateService()
-        => new(_coordinator, _queue, () => [_libDir]);
+    private IdleAnalysisService CreateService(Func<IEnumerable<string>>? playlistProvider = null)
+        => new(_coordinator, _queue, () => [_libDir], playlistProvider);
 
     [Fact]
     public async Task ScanOnce_AnalyzesOneUnanalyzedFile()
@@ -176,6 +176,39 @@ public class IdleAnalysisServiceTests : IDisposable
         {
             try { Directory.Delete(dir, true); } catch { }
         }
+    }
+
+    [Fact]
+    public async Task ScanOnce_PrioritizesPlaylistUpcomingFileOverLibraryFolder()
+    {
+        // ライブラリフォルダ内(a.mp3)より、プレイリストの次曲(next.mp3、ライブラリ外)を先に解析する
+        var f1 = AddLibraryFile("a.mp3");
+        var next = Path.Combine(_dir, "next.mp3");
+        File.WriteAllBytes(next, Guid.NewGuid().ToByteArray());
+        var svc = CreateService(() => [next]);
+
+        Assert.True(await svc.ScanOnceAsync());
+        Assert.True(_cache.TryLoad(ContentHasher.ComputeKey(next), "medium", out _));
+        Assert.False(_cache.TryLoad(ContentHasher.ComputeKey(f1), "medium", out _));
+    }
+
+    [Fact]
+    public async Task ScanOnce_PlaylistUpcomingAlreadyCached_FallsBackToLibraryFolder()
+    {
+        var f1 = AddLibraryFile("a.mp3");
+        var next = Path.Combine(_dir, "next.mp3");
+        File.WriteAllBytes(next, Guid.NewGuid().ToByteArray());
+        _cache.Save(new TranscriptionResult
+        {
+            SourceFileName = "next.mp3",
+            HashKey = ContentHasher.ComputeKey(next),
+            Model = "medium",
+            Segments = [new(0, 1, "既存")],
+        });
+        var svc = CreateService(() => [next]);
+
+        Assert.True(await svc.ScanOnceAsync());
+        Assert.True(_cache.TryLoad(ContentHasher.ComputeKey(f1), "medium", out _));
     }
 
     [Fact]

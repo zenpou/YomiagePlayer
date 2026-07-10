@@ -42,6 +42,17 @@ public partial class PlaylistViewModel : ObservableObject
 
     public event Action<PlaylistItem>? PlayRequested;
 
+    /// <summary>再生中の次以降にある曲のファイルパス(リスト順)。アイドル先読み解析の優先対象。</summary>
+    public IEnumerable<string> UpcomingFiles
+    {
+        get
+        {
+            if (CurrentItem is null) return [];
+            var index = Items.IndexOf(CurrentItem);
+            return index < 0 ? [] : Items.Skip(index + 1).Select(i => i.FilePath);
+        }
+    }
+
     public PlaylistViewModel() : this(new Random()) { }
 
     public PlaylistViewModel(Random random) => _random = random;

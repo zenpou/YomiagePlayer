@@ -9,14 +9,17 @@ namespace YomiagePlayer.Services;
 /// アイドル時(解析キューが空のとき)に、登録ライブラリフォルダ内の
 /// 未解析ファイルを1件ずつバックグラウンド解析する。
 /// - ユーザーがファイルを開くとそのジョブがキュー先頭に入るため、常にユーザー操作が優先
+/// - 再生中プレイリストの次以降の曲(playlistProvider)を、ライブラリ全体の走査より優先して先読み
 /// - 1tickにつき1ファイルのみ処理し、次のtickで再びアイドルなら続きを処理
 /// - 処理済み/失敗したパスはセッション内で記憶して再走査しない
 /// </summary>
 public sealed class IdleAnalysisService(
     TranscriptionCoordinator coordinator,
     TranscriptionQueue queue,
-    Func<IEnumerable<string>> folderProvider) : IDisposable
+    Func<IEnumerable<string>> folderProvider,
+    Func<IEnumerable<string>>? playlistProvider = null) : IDisposable
 {
+    private readonly Func<IEnumerable<string>> _playlistProvider = playlistProvider ?? (() => []);
     private readonly HashSet<string> _visited = new(StringComparer.OrdinalIgnoreCase);
     private Timer? _timer;
     private int _scanning;
@@ -45,22 +48,18 @@ public sealed class IdleAnalysisService(
         {
             if (!queue.IsIdle) return false;
 
+            // 再生中プレイリストの次以降の曲を、ライブラリ全体の走査より優先して先読み解析
+            foreach (var file in _playlistProvider())
+            {
+                if (await TryAnalyzeAsync(file).ConfigureAwait(false)) return true; // 1tick 1件
+            }
+
             foreach (var folder in folderProvider())
             {
                 if (!Directory.Exists(folder)) continue;
                 foreach (var file in MediaFiles.Enumerate(folder))
                 {
-                    lock (_visited)
-                    {
-                        if (!_visited.Add(file)) continue;
-                    }
-
-                    var analyzed = await coordinator.EnsureAnalyzedAsync(file).ConfigureAwait(false);
-                    if (analyzed)
-                    {
-                        Log.Information("アイドル解析完了: {File}", Path.GetFileName(file));
-                        return true; // 1tick 1件。続きは次のアイドルtickで
-                    }
+                    if (await TryAnalyzeAsync(file).ConfigureAwait(false)) return true; // 1tick 1件
                 }
             }
             return false;
@@ -69,6 +68,18 @@ public sealed class IdleAnalysisService(
         {
             Volatile.Write(ref _scanning, 0);
         }
+    }
+
+    private async Task<bool> TryAnalyzeAsync(string file)
+    {
+        lock (_visited)
+        {
+            if (!_visited.Add(file)) return false;
+        }
+
+        if (!await coordinator.EnsureAnalyzedAsync(file).ConfigureAwait(false)) return false;
+        Log.Information("アイドル先読み解析完了: {File}", Path.GetFileName(file));
+        return true;
     }
 
     public void Dispose() => _timer?.Dispose();

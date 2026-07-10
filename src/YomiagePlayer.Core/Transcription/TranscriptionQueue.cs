@@ -6,6 +6,8 @@ namespace YomiagePlayer.Core.Transcription;
 /// 文字起こしジョブの直列実行キュー。
 /// - 同時実行は常に1件(Whisperのメモリ/GPU負荷を抑える)
 /// - 新規ジョブはキュー先頭に割り込み(ユーザーが最後に開いた曲を最優先)
+/// - preempt=trueで積んだジョブは、実行中の別ジョブを即キャンセルしてすぐ実行に移る
+///   (ユーザーがトラックを切り替えた際、古いトラックの解析完了を待たず新トラックへ即応するため)
 /// - 同一キーの実行中/待機中ジョブがあれば同じTaskを返す(重複解析の抑止)
 /// - 待機数が上限を超えたら最も古い待機ジョブをキャンセル破棄
 /// </summary>
@@ -23,6 +25,7 @@ public class TranscriptionQueue(int maxWaiting = 5)
     private readonly List<QueueItem> _waiting = [];
     private readonly CancellationTokenSource _shutdownCts = new();
     private QueueItem? _running;
+    private CancellationTokenSource? _runningCts;
     private Task _pump = Task.CompletedTask;
 
     /// <summary>実行中ジョブも待機ジョブもない状態。アイドル時バックグラウンド解析の判定に使う。</summary>
@@ -31,8 +34,13 @@ public class TranscriptionQueue(int maxWaiting = 5)
         get { lock (_lock) return _running is null && _waiting.Count == 0; }
     }
 
+    /// <param name="preempt">
+    /// trueなら、実行中の別ジョブを即キャンセルしてこのジョブへすぐ移行する
+    /// (ユーザー操作による曲切り替え用)。falseならキュー先頭に割り込むだけで実行中ジョブは完走させる
+    /// (アイドル時バックグラウンド解析用。ユーザー操作を邪魔しない)。
+    /// </param>
     public Task<TranscriptionResult> Enqueue(
-        string hashKey, Func<CancellationToken, Task<TranscriptionResult>> job)
+        string hashKey, Func<CancellationToken, Task<TranscriptionResult>> job, bool preempt = false)
     {
         lock (_lock)
         {
@@ -54,6 +62,8 @@ public class TranscriptionQueue(int maxWaiting = 5)
 
             if (_running is null)
                 _pump = PumpAsync();
+            else if (preempt)
+                _runningCts?.Cancel();
 
             return item.Tcs.Task;
         }
@@ -64,21 +74,25 @@ public class TranscriptionQueue(int maxWaiting = 5)
         while (true)
         {
             QueueItem item;
+            CancellationTokenSource cts;
             lock (_lock)
             {
                 if (_waiting.Count == 0)
                 {
                     _running = null;
+                    _runningCts = null;
                     return;
                 }
                 item = _waiting[0];
                 _waiting.RemoveAt(0);
                 _running = item;
+                cts = CancellationTokenSource.CreateLinkedTokenSource(_shutdownCts.Token);
+                _runningCts = cts;
             }
 
             try
             {
-                var result = await item.Job(_shutdownCts.Token).ConfigureAwait(false);
+                var result = await item.Job(cts.Token).ConfigureAwait(false);
                 item.Tcs.TrySetResult(result);
             }
             catch (OperationCanceledException)
@@ -88,6 +102,14 @@ public class TranscriptionQueue(int maxWaiting = 5)
             catch (Exception ex)
             {
                 item.Tcs.TrySetException(ex);
+            }
+            finally
+            {
+                lock (_lock)
+                {
+                    if (_runningCts == cts) _runningCts = null;
+                }
+                cts.Dispose();
             }
         }
     }

@@ -77,6 +77,50 @@ public class TranscriptionQueueTests
     }
 
     [Fact]
+    public async Task Preempt_CancelsRunningJobAndRunsNewOneImmediately()
+    {
+        var q = new TranscriptionQueue();
+        var started = new TaskCompletionSource();
+        var oldJob = q.Enqueue("old", async ct =>
+        {
+            started.SetResult();
+            await Task.Delay(Timeout.Infinite, ct);
+            return Result("old");
+        });
+        await started.Task;
+
+        var newJob = q.Enqueue("new", ct => Task.FromResult(Result("new")), preempt: true);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => oldJob);
+        Assert.Equal("new", (await newJob).HashKey);
+    }
+
+    [Fact]
+    public async Task WithoutPreempt_RunningJobIsLeftToFinish()
+    {
+        var q = new TranscriptionQueue();
+        var started = new TaskCompletionSource();
+        var gate = new TaskCompletionSource();
+        var oldJob = q.Enqueue("old", async ct =>
+        {
+            started.SetResult();
+            await gate.Task;
+            return Result("old");
+        });
+        await started.Task;
+
+        var newJob = q.Enqueue("new", ct => Task.FromResult(Result("new"))); // preempt既定=false
+
+        // 実行中ジョブは中断されず、完走するまでnewJobは始まらない
+        await Task.Delay(20);
+        Assert.False(oldJob.IsCompleted);
+
+        gate.SetResult();
+        Assert.Equal("old", (await oldJob).HashKey);
+        Assert.Equal("new", (await newJob).HashKey);
+    }
+
+    [Fact]
     public async Task Shutdown_CancelsRunningJob()
     {
         var q = new TranscriptionQueue();
