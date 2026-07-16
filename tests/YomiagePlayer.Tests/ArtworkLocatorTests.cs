@@ -88,19 +88,40 @@ public class ArtworkLocatorTests : IDisposable
     }
 
     [Fact]
-    public void FindDirectoryImage_FallsBackToSiblingPhotoFolder()
+    public void FindDirectoryImage_WorkRootMarker_FindsImageInSiblingFolderRecursively()
     {
-        // 実際の頒布構成: 作品フォルダ/MP3/曲.mp3 と 作品フォルダ/photo/表紙.jpg
+        // .meta.json(fanza-downloaderが作品フォルダ直下に生成する目印)があれば、
+        // そのフォルダを境界として配下を再帰的に探索する(兄弟フォルダの名前は問わない)。
+        // 例: 作品フォルダ/.meta.json, 作品フォルダ/MP3/曲.mp3, 作品フォルダ/差分/深い/表紙.jpg
+        File.WriteAllBytes(Path.Combine(_dir, ".meta.json"), []);
+        var mp3Dir = Path.Combine(_dir, "MP3");
+        var nestedImageDir = Path.Combine(_dir, "差分", "深い");
+        Directory.CreateDirectory(mp3Dir);
+        Directory.CreateDirectory(nestedImageDir);
+        var media = Path.Combine(mp3Dir, "01_song.mp3");
+        File.WriteAllBytes(media, FakeImageBytes);
+        var expected = Path.Combine(nestedImageDir, "20211129.jpg");
+        File.WriteAllBytes(expected, FakeImageBytes);
+
+        Assert.Equal(expected, ArtworkLocator.FindDirectoryImage(media));
+    }
+
+    [Fact]
+    public void FindDirectoryImage_WithoutWorkRootMarker_SiblingFolderIsNotAutoDetected()
+    {
+        // .meta.jsonが無い場合、兄弟フォルダの中は(名前が"photo"等の定番語であっても)
+        // 探索対象にしない。無関係な共有フォルダの兄弟フォルダを再帰的に舐めてしまう
+        // リスクを避けるため、境界が確認できるフォルダ(ライブラリ登録 or .meta.json)以外は
+        // 深追いしない仕様
         var mp3Dir = Path.Combine(_dir, "MP3");
         var photoDir = Path.Combine(_dir, "photo");
         Directory.CreateDirectory(mp3Dir);
         Directory.CreateDirectory(photoDir);
         var media = Path.Combine(mp3Dir, "01_song.mp3");
         File.WriteAllBytes(media, FakeImageBytes);
-        var expected = Path.Combine(photoDir, "20211129.jpg");
-        File.WriteAllBytes(expected, FakeImageBytes);
+        File.WriteAllBytes(Path.Combine(photoDir, "20211129.jpg"), FakeImageBytes);
 
-        Assert.Equal(expected, ArtworkLocator.FindDirectoryImage(media));
+        Assert.Null(ArtworkLocator.FindDirectoryImage(media));
     }
 
     [Fact]
@@ -136,13 +157,13 @@ public class ArtworkLocatorTests : IDisposable
     [Fact]
     public void FindDirectoryImage_LibraryRoot_FindsImageArbitrarilyDeepAndNamed()
     {
-        // ライブラリ登録フォルダ配下なら、祖先探索の階層制限(MaxAncestorDepth)や
-        // 兄弟フォルダ名の制約(ImageFolderNames)を超えて、配下のどこにあっても見つかる
+        // ライブラリ登録フォルダ配下なら、祖先探索の階層制限(MaxAncestorDepth)を
+        // 超えて、配下のどこにあっても(フォルダ名を問わず)見つかる
         var nestedDir = Path.Combine(_dir, "audio", "deep", "nested");
         Directory.CreateDirectory(nestedDir);
         var media = Path.Combine(nestedDir, "track01.mp3");
         File.WriteAllBytes(media, FakeImageBytes);
-        var otherDir = Path.Combine(_dir, "artwork_stuff"); // ImageFolderNamesに含まれない名前
+        var otherDir = Path.Combine(_dir, "artwork_stuff");
         Directory.CreateDirectory(otherDir);
         var expected = Path.Combine(otherDir, "cover.jpg");
         File.WriteAllBytes(expected, FakeImageBytes);
@@ -182,6 +203,29 @@ public class ArtworkLocatorTests : IDisposable
     }
 
     [Fact]
+    public void FindAllArtwork_LibraryRoot_IncludesDeeplyNestedImagesEvenWithSameDirImagePresent()
+    {
+        // 実際の頒布構成: ライブラリ登録フォルダ直下にthumbnail.jpgと曲.mp3があり、
+        // さらに2階層下のサブフォルダに差分イラスト集がある。
+        // 同ディレクトリのthumbnail.jpgだけで打ち切ると、その差分イラストが一切候補に上がらない
+        var media = CreateFile("01_song.mp3");
+        var thumbnail = CreateFile("thumbnail.jpg");
+        var illustDir = Path.Combine(_dir, "屈辱おしっこ喫茶", "パッケージイラスト＋差分イラスト特典");
+        Directory.CreateDirectory(illustDir);
+        var illust1 = Path.Combine(illustDir, "パッケージイラスト【ロゴあり】.jpg");
+        var illust2 = Path.Combine(illustDir, "パッケージイラスト【ロゴ無し】.jpg");
+        File.WriteAllBytes(illust1, FakeImageBytes);
+        File.WriteAllBytes(illust2, FakeImageBytes);
+
+        var found = ArtworkLocator.FindDirectoryImages(media, libraryRoot: _dir);
+
+        Assert.Contains(thumbnail, found);
+        Assert.Contains(illust1, found);
+        Assert.Contains(illust2, found);
+        Assert.Equal(3, found.Count);
+    }
+
+    [Fact]
     public void FindDirectoryImage_ParentFolderLooseImage_IgnoresUnrecognizedNames()
     {
         // 親フォルダ直下の画像は無関係なファイルのこともあるため、
@@ -214,7 +258,7 @@ public class ArtworkLocatorTests : IDisposable
     public void FindDirectoryImage_LibraryRoot_FindsImageInUnrecognizedNamedFolder()
     {
         // 実際の頒布構成: 作品フォルダ(=ライブラリ登録フォルダ)/mp3/曲.mp3 と
-        // 作品フォルダ/omake/イラスト.jpg ("omake"はImageFolderNamesの語彙にない未知の命名でも見つかる)
+        // 作品フォルダ/omake/イラスト.jpg (フォルダ名を問わず配下は全て候補になる)
         var mp3Dir = Path.Combine(_dir, "mp3");
         var omakeDir = Path.Combine(_dir, "omake");
         Directory.CreateDirectory(mp3Dir);
@@ -226,37 +270,6 @@ public class ArtworkLocatorTests : IDisposable
         File.WriteAllBytes(Path.Combine(omakeDir, "e15_テキスト.txt"), FakeImageBytes); // 画像以外の付随ファイル
 
         Assert.Equal(expected, ArtworkLocator.FindDirectoryImage(media, libraryRoot: _dir));
-    }
-
-    [Fact]
-    public void FindDirectoryImage_FallsBackToSiblingImageFolderWithNumberedJapaneseName()
-    {
-        // libraryRootが不明でも、「イメージ」等の名前を含む兄弟フォルダは
-        // 部分一致(連番接頭辞込み)で見つかる
-        var mp3Dir = Path.Combine(_dir, "MP3");
-        var imageDir = Path.Combine(_dir, "①イメージ");
-        Directory.CreateDirectory(mp3Dir);
-        Directory.CreateDirectory(imageDir);
-        var media = Path.Combine(mp3Dir, "01_song.mp3");
-        File.WriteAllBytes(media, FakeImageBytes);
-        var expected = Path.Combine(imageDir, "パッケージイラスト.png");
-        File.WriteAllBytes(expected, FakeImageBytes);
-
-        Assert.Equal(expected, ArtworkLocator.FindDirectoryImage(media));
-    }
-
-    [Fact]
-    public void FindDirectoryImage_IgnoresSiblingFoldersWithUnrecognizedNames()
-    {
-        var mp3Dir = Path.Combine(_dir, "MP3");
-        var otherDir = Path.Combine(_dir, "Scenario"); // photo等の定番名ではない
-        Directory.CreateDirectory(mp3Dir);
-        Directory.CreateDirectory(otherDir);
-        var media = Path.Combine(mp3Dir, "01_song.mp3");
-        File.WriteAllBytes(media, FakeImageBytes);
-        File.WriteAllBytes(Path.Combine(otherDir, "art.jpg"), FakeImageBytes);
-
-        Assert.Null(ArtworkLocator.FindDirectoryImage(media));
     }
 
     // ---- メタデータ埋め込み画像 ----
@@ -291,6 +304,42 @@ public class ArtworkLocatorTests : IDisposable
         byte[] second = [0x03, 0x04];
         EmbedPictures(mp3, first, second);
         Assert.Equal([first, second], ArtworkLocator.TryGetAllEmbedded(mp3));
+    }
+
+    [Fact]
+    public void TryGetAllEmbedded_NotAPictureType_IsIgnored()
+    {
+        // 実例: 一部の頒布mp3は12バイト等のゴミデータをPictureType.NotAPictureとして
+        // APICフレームに残している。これを表紙として拾うと、フォルダ内の正しい画像への
+        // フォールバックが一切走らなくなるため除外する
+        var mp3 = CopyFixtureMp3();
+        using (var tf = TagLib.File.Create(mp3))
+        {
+            tf.Tag.Pictures = [new TagLib.Picture(new TagLib.ByteVector([0x00, 0x01]))
+            {
+                Type = TagLib.PictureType.NotAPicture,
+            }];
+            tf.Save();
+        }
+
+        Assert.Empty(ArtworkLocator.TryGetAllEmbedded(mp3));
+    }
+
+    [Fact]
+    public void FindArtwork_NotAPictureType_FallsBackToDirectoryImage()
+    {
+        var mp3 = CopyFixtureMp3();
+        using (var tf = TagLib.File.Create(mp3))
+        {
+            tf.Tag.Pictures = [new TagLib.Picture(new TagLib.ByteVector([0x00, 0x01]))
+            {
+                Type = TagLib.PictureType.NotAPicture,
+            }];
+            tf.Save();
+        }
+        var expected = CreateFile("cover.jpg", [0xFF, 0xFE]);
+
+        Assert.Equal(File.ReadAllBytes(expected), ArtworkLocator.FindArtwork(mp3));
     }
 
     // ---- 統合(埋め込み優先 → ディレクトリ画像) ----

@@ -57,10 +57,14 @@ public partial class LibraryPane : UserControl
             Vm?.OpenFolder(folder, append: true);
     }
 
-    private void RemoveFolder_Click(object sender, RoutedEventArgs e)
+    private void RemoveFolder_Click(object sender, RoutedEventArgs e) =>
+        Vm?.RemoveFolders(List.SelectedItems.OfType<LibraryFolder>());
+
+    private void List_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (List.SelectedItem is LibraryFolder folder)
-            Vm?.RemoveFolderCommand.Execute(folder);
+        if (e.Key != Key.Delete) return;
+        Vm?.RemoveFolders(List.SelectedItems.OfType<LibraryFolder>());
+        e.Handled = true;
     }
 
     private void OpenInExplorer_Click(object sender, RoutedEventArgs e)

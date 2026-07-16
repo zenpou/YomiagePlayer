@@ -51,10 +51,15 @@ public partial class LibraryViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void RemoveFolder(LibraryFolder folder)
+    private void RemoveFolder(LibraryFolder folder) => RemoveFolders([folder]);
+
+    public void RemoveFolders(IEnumerable<LibraryFolder> folders)
     {
-        Folders.Remove(folder);
-        FoldersChanged?.Invoke();
+        var removed = false;
+        foreach (var folder in folders.ToList())
+            removed |= Folders.Remove(folder);
+        if (removed)
+            FoldersChanged?.Invoke();
     }
 
     public void OpenFolder(LibraryFolder folder, bool append)

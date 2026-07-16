@@ -15,14 +15,6 @@ public static class ArtworkLocator
     private static readonly string[] PreferredNames =
         ["cover", "folder", "front", "album", "jacket", "artwork", "thumbnail"];
 
-    // 音声を「MP3」「wav」等のサブフォルダに分け、画像は兄弟フォルダにまとめる
-    // 頒布物(同人音声作品など)がよくある構成のため、これらの名前の兄弟/配下フォルダも探す。
-    // 部分一致で判定するため(「①イメージ」のような連番接頭辞付きフォルダ名にも対応)、
-    // 英語の汎用語(「art」等)は除外し、誤検出しにくい語のみを残す
-    private static readonly string[] ImageFolderNames =
-        ["photo", "photos", "image", "images", "img", "jacket", "jackets", "artwork", "scan", "scans", "cover",
-         "イメージ", "画像", "ジャケット", "パッケージ", "表紙", "ポスター"];
-
     // 親フォルダを何階層まで遡って表紙画像を探すか(例: 作品/mp3/SEあり/曲.mp3 のような
     // 多段サブフォルダでも作品フォルダ直下のthumbnail.jpgに辿り着けるようにする)。
     // 際限なく遡ると無関係な共有フォルダの画像を拾う恐れがあるため、必要最小限に留める
@@ -67,7 +59,11 @@ public static class ArtworkLocator
         {
             using var file = TagLib.File.Create(mediaPath);
             return file.Tag.Pictures
-                .Where(p => p.Data is { Count: > 0 })
+                // TagLibがPictureType.NotAPictureに分類するAPICフレームは、壊れた/空の
+                // タグ付けツールが残したゴミであることが多い(実例: 12バイトの無効データ)。
+                // これを表紙として採用すると、実際にはフォルダ内にある正しい画像への
+                // フォールバックが一切走らなくなってしまうため除外する
+                .Where(p => p.Type != TagLib.PictureType.NotAPicture && p.Data is { Count: > 0 })
                 .Select(p => p.Data.Data)
                 .ToList();
         }
@@ -87,11 +83,11 @@ public static class ArtworkLocator
     /// libraryRoot(ライブラリに登録されたフォルダ)が分かればその配下の画像を
     /// フォルダ名・ファイル名を問わず全て候補として返す(例: 作品フォルダをライブラリ登録した場合、
     /// 作品フォルダ/mp3/曲.mp3 の表紙が作品フォルダ/thumbnail.jpg やどのサブフォルダにあっても見つかる)。
-    /// libraryRootが不明なら、音声を「作品フォルダ/mp3/」やさらに「作品フォルダ/mp3/SEあり/」
-    /// のように多段のサブフォルダに分けた構成を想定し祖先フォルダを辿るヒューリスティックと、
-    /// 音声/画像をサブフォルダで分けた構成(例: 作品/MP3/曲.mp3 と 作品/photo/表紙.jpg)を
-    /// 想定した兄弟フォルダ探索にフォールバックする(こちらは無関係な画像を拾わないよう、
-    /// 同名/定番名/画像フォルダ名の一致がある場合のみ採用する)。
+    /// libraryRootが不明なら、直近の祖先から順に(MaxAncestorDepthまで)、
+    /// .meta.json(作品フォルダの目印)があればそこを境界として配下を再帰的に探索し、
+    /// なければそのフォルダ直下(非再帰)の画像のみを候補にする。祖先を無制限に、かつ
+    /// 目印なしで再帰探索すると、共有フォルダ(ダウンロードフォルダ直下など)を丸ごと
+    /// 舐めてしまう恐れがあるため、境界が確認できないフォルダでは深追いしない。
     /// 見つかったフォルダの画像を全件、優先順(メディアと同名 → 定番名 → 名前順)で先頭から返す。
     /// </summary>
     public static List<string> FindDirectoryImages(string mediaPath, string? libraryRoot = null)
@@ -99,49 +95,41 @@ public static class ArtworkLocator
         var dir = Path.GetDirectoryName(mediaPath);
         if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) return [];
 
-        var direct = ImagesIn(dir);
-        if (direct.Count > 0) return OrderBestFirst(direct, mediaPath);
-
         if (libraryRoot is not null && Directory.Exists(libraryRoot) && IsAncestorOf(libraryRoot, dir))
         {
-            // ライブラリ登録フォルダはユーザーが明示的に指定した境界なので、配下にある
-            // 画像はフォルダ名・ファイル名を問わず全て表紙候補として採用する(切り替え表示用)
+            // ライブラリ登録フォルダはユーザーが明示的に指定した境界なので、同ディレクトリに
+            // 画像があるかどうかに関わらず配下全体を対象にする(フォルダ名・ファイル名も問わず
+            // 全て表紙候補として採用)。同ディレクトリの画像だけを優先して他を無視すると、
+            // 例えば作品フォルダ直下のthumbnail.jpgに隠れてサブフォルダの差分イラスト等が
+            // 一切候補に上がらなくなってしまうため
             var libraryImages = ImagesUnder(libraryRoot);
             return libraryImages.Count > 0 ? OrderBestFirst(libraryImages, mediaPath) : [];
         }
 
-        // libraryRootが不明な場合(ライブラリ経由で開かれていないファイル等)のヒューリスティック。
-        // 祖先フォルダは無関係なファイルも同居しうる共有ディレクトリのことがあるため、
-        // 同名/定番名の一致がある場合のみ採用する(「名前順で先頭」は適用しない)。
-        // .meta.json(作品フォルダの目印)に達したらそこで打ち切り、それより上の
-        // 共有ライブラリフォルダへは探しに行かない
+        var direct = ImagesIn(dir);
+        if (direct.Count > 0) return OrderBestFirst(direct, mediaPath);
+
+        // libraryRootが不明な場合(ライブラリ経由で開かれていないファイル等)のフォールバック
         var ancestor = Directory.GetParent(dir);
         for (var depth = 0; ancestor is not null && depth < MaxAncestorDepth; depth++, ancestor = ancestor.Parent)
         {
+            if (File.Exists(Path.Combine(ancestor.FullName, WorkRootMarkerFileName)))
+            {
+                // 目印(.meta.json)がある=作品フォルダの境界が確定するので、配下を再帰的に探索してよい
+                var images = ImagesUnder(ancestor.FullName);
+                return images.Count > 0 ? OrderBestFirst(images, mediaPath) : [];
+            }
+
+            // 目印がない祖先は無関係な共有フォルダの可能性があるため、直下の画像のみ(非再帰)を対象にし、
+            // かつメディアと同名/定番名(cover/thumbnail等)に一致する場合のみ採用する
+            // (「名前順で先頭」は適用しない=無関係な孤立ファイルを拾わないため)
             var ancestorImages = ImagesIn(ancestor.FullName);
             if (ancestorImages.Count > 0 && FindBestMatch(ancestorImages, mediaPath, requireMatch: true) is not null)
                 return OrderBestFirst(ancestorImages, mediaPath);
-
-            if (File.Exists(Path.Combine(ancestor.FullName, WorkRootMarkerFileName))) break;
-        }
-
-        var parent = Directory.GetParent(dir);
-        if (parent is null) return [];
-
-        foreach (var sibling in parent.GetDirectories())
-        {
-            if (string.Equals(sibling.FullName, dir, StringComparison.OrdinalIgnoreCase)) continue;
-            if (!IsImageFolderName(sibling.Name)) continue;
-            var siblingImages = ImagesIn(sibling.FullName);
-            if (siblingImages.Count > 0) return OrderBestFirst(siblingImages, mediaPath);
         }
 
         return [];
     }
-
-    /// <summary>フォルダ名が画像専用フォルダの命名慣習(部分一致)に合致するか。</summary>
-    private static bool IsImageFolderName(string folderName) =>
-        ImageFolderNames.Any(name => folderName.Contains(name, StringComparison.OrdinalIgnoreCase));
 
     private static bool IsAncestorOf(string ancestorDir, string dir)
     {

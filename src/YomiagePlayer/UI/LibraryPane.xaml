@@ -30,10 +30,12 @@
 
         <ListBox x:Name="List" Grid.Row="2"
                  ItemsSource="{Binding Folders}"
+                 SelectionMode="Extended"
                  Background="Transparent" BorderThickness="0"
                  HorizontalContentAlignment="Stretch"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                 MouseDoubleClick="List_MouseDoubleClick">
+                 MouseDoubleClick="List_MouseDoubleClick"
+                 PreviewKeyDown="List_PreviewKeyDown">
             <ListBox.ContextMenu>
                 <ContextMenu>
                     <MenuItem Header="プレイリストへ展開(置換)" Click="OpenReplace_Click" />
@@ -41,7 +43,7 @@
                     <Separator />
                     <MenuItem Header="エクスプローラーで開く" Click="OpenInExplorer_Click" />
                     <Separator />
-                    <MenuItem Header="ライブラリから削除" Click="RemoveFolder_Click" />
+                    <MenuItem Header="ライブラリから削除(選択項目全て)" Click="RemoveFolder_Click" />
                 </ContextMenu>
             </ListBox.ContextMenu>
             <ListBox.ItemTemplate>
